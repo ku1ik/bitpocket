@@ -1,8 +1,14 @@
 require 'fileutils'
 
 def sync
-  system "rsync -auvzxi local/ remote/"
+  system "[ -d .sinck ] || mkdir .sinck"
+  system "[ -f .sinck/tree-prev ] || touch .sinck/tree-prev"
+  system "find | sort | grep -v ./.sinck > .sinck/tree-current"
   system "rsync -auvzxi --delete remote/ local/"
+  # comm -23 .sinck/tree-prev .sinck/tree-current 
+  system "rsync -auvzxi local/ remote/"
+  system "rm .sinck/tree-current"
+  system "find | sort | grep -v ./.sinck > .sinck/tree-prev"
 end
 
 def local_path(fname)
@@ -104,6 +110,7 @@ describe 'bitpocket' do
     it 'should remove file from remote' do
       sync
 
+      File.exist?(local_path('a')).should be(false)
       File.exist?(remote_path('a')).should be(false)
     end
   end
@@ -120,6 +127,7 @@ describe 'bitpocket' do
       sync
 
       File.exist?(local_path('a')).should be(false)
+      File.exist?(remote_path('a')).should be(false)
     end
   end
 end

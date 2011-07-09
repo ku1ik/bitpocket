@@ -83,6 +83,7 @@ describe 'bitpocket' do
       touch local_path('a')
       touch remote_path('a')
       sync
+      system "touch -d '00:00' #{remote_path('a')}"
       cat content, local_path('a')
     end
 

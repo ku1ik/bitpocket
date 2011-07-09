@@ -3,12 +3,13 @@ require 'fileutils'
 def sync
   system "[ -d .sinck ] || mkdir .sinck"
   system "[ -f .sinck/tree-prev ] || touch .sinck/tree-prev"
-  system "find | sort | grep -v ./.sinck > .sinck/tree-current"
-  system "rsync -auvzxi --delete remote/ local/"
-  # comm -23 .sinck/tree-prev .sinck/tree-current 
-  system "rsync -auvzxi local/ remote/"
+  system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-current"
+  system "comm -23 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >.sinck/fetch-exclude"
+  system "comm -13 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >>.sinck/fetch-exclude"
+  system "rsync -auvzxi --delete --exclude .sinck --exclude-from .sinck/fetch-exclude ../remote/ ."
+  system "rsync -auvzxi --delete --exclude .sinck . ../remote/"
   system "rm .sinck/tree-current"
-  system "find | sort | grep -v ./.sinck > .sinck/tree-prev"
+  system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-prev"
 end
 
 def local_path(fname)
@@ -34,17 +35,32 @@ end
 describe 'bitpocket' do
   before(:all) do
     @tmp_dir = "/tmp/bitpocket-test-#{Time.now.to_i}"
-    @test_case_num = 0
+    @test_case = { :num => 0 }
   end
 
   before do
-    @test_case_num += 1
-    test_case_dir = File.join(@tmp_dir, @test_case_num.to_s)
+    @test_case[:num] += 1
+    test_case_dir = File.join(@tmp_dir, @test_case[:num].to_s)
     @local_dir = File.join(test_case_dir, 'local')
     @remote_dir = File.join(test_case_dir, 'remote')
     FileUtils.mkdir_p(@local_dir)
     FileUtils.mkdir_p(@remote_dir)
-    Dir.chdir(test_case_dir)
+    Dir.chdir(@local_dir)
+  end
+
+  it 'does not remove new local files' do
+    touch local_path('a')
+    sync
+    File.exist?(local_path('a')).should be(true)
+  end
+
+  it 'does not bring back removed local files' do
+    touch local_path('a')
+    touch remote_path('a')
+    sync
+    rm local_path('a')
+    sync
+    File.exist?(local_path('a')).should be(false)
   end
 
   describe 'creating new local file' do
@@ -52,7 +68,7 @@ describe 'bitpocket' do
       touch local_path('a')
     end
 
-    it 'should transfer new file from local to remote' do
+    it 'transfers new file from local to remote' do
       sync
 
       File.exist?(local_path('a')).should be(true)
@@ -61,15 +77,20 @@ describe 'bitpocket' do
   end
 
   describe 'updating local file' do
+    let(:content) { 'foo' }
+
     before do
-      cat 'foo', local_path('a')
+      touch local_path('a')
       touch remote_path('a')
+      sync
+      cat content, local_path('a')
     end
 
-    it 'should transfer updated file from local to remote' do
+    it 'transfers updated file from local to remote' do
       sync
 
-      File.read(local_path('a')).should == File.read(remote_path('a'))
+      File.read(local_path('a')).should == content
+      File.read(remote_path('a')).should == content
     end
   end
 
@@ -78,7 +99,7 @@ describe 'bitpocket' do
       touch remote_path('a')
     end
 
-    it 'should transfer new file from remote to local' do
+    it 'transfers new file from remote to local' do
       sync
 
       File.exist?(local_path('a')).should be(true)
@@ -87,15 +108,20 @@ describe 'bitpocket' do
   end
 
   describe 'updating remote file' do
+    let(:content) { 'foo' }
+
     before do
       touch local_path('a')
-      cat 'foo', remote_path('a')
+      touch remote_path('a')
+      sync
+      cat content, remote_path('a')
     end
 
-    it 'should transfer updated file from remote to local' do
+    it 'transfers updated file from remote to local' do
       sync
 
-      File.read(local_path('a')).should == File.read(remote_path('a'))
+      File.read(local_path('a')).should == content
+      File.read(remote_path('a')).should == content
     end
   end
 
@@ -107,7 +133,7 @@ describe 'bitpocket' do
       rm local_path('a')
     end
 
-    it 'should remove file from remote' do
+    it 'removes file from remote' do
       sync
 
       File.exist?(local_path('a')).should be(false)
@@ -123,7 +149,7 @@ describe 'bitpocket' do
       rm remote_path('a')
     end
 
-    it 'should remove file from local' do
+    it 'removes file from local' do
       sync
 
       File.exist?(local_path('a')).should be(false)

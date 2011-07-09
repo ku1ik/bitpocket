@@ -6,8 +6,8 @@ def sync
   system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-current"
   system "comm -23 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >.sinck/fetch-exclude"
   system "comm -13 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >>.sinck/fetch-exclude"
-  system "rsync -auvzxi --delete --exclude .sinck --exclude-from .sinck/fetch-exclude ../remote/ ."
-  system "rsync -auvzxi --delete --exclude .sinck . ../remote/"
+  system "rsync -auvzx --delete --exclude .sinck --exclude-from .sinck/fetch-exclude ../remote/ . &>/dev/null"
+  system "rsync -auvzx --delete --exclude .sinck . ../remote/ &>/dev/null"
   system "rm .sinck/tree-current"
   system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-prev"
 end

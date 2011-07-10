@@ -1,0 +1,80 @@
+#!/bin/bash
+
+export LC_ALL=C # for stable "sort" output
+
+DOTDIR=.bitpocket
+CFG_PATH=$DOTDIR/config
+LOCK_PATH=$DOTDIR/lock
+
+function init {
+  if [[ -d $DOTDIR || -f $CFG_PATH ]]; then
+    echo "fatal: Current directory already initialized for bitpocket"
+    exit 128
+  fi
+
+  if [ -z $1 ]; then
+    echo "usage: bitpocket init <REMOTE>"
+    echo
+    echo "<REMOTE> can be local path or host:path"
+    exit 128
+  fi
+
+  mkdir $DOTDIR
+
+  echo "REMOTE=\"$1\"" > $CFG_PATH
+  echo "# export RSYNC_RSH=\"ssh -i .bitpocket/id_rsa\"" >> $CFG_PATH
+
+  echo "Initialized bitpocket directory at `pwd`"
+}
+
+function save_tree {
+  find | sort | cut -d '/' -f 2- | grep -v "^\\$DOTDIR" | grep -v '^\.$' > $DOTDIR/$1
+}
+
+function sync {
+  if [ ! -d $DOTDIR ]; then
+    echo "fatal: Not a bitpocket directory"
+    exit 128
+  fi
+
+  [ -f $LOCK_PATH ] && kill -0 $(cat $LOCK_PATH) &>/dev/null && exit 0
+  echo $$ > $LOCK_PATH
+  . $CFG_PATH
+
+  echo -e "\e[1;32mbitpocket\e[0m started at `date`."
+  echo
+
+  # check what has changed
+  touch $DOTDIR/tree-prev
+  save_tree "tree-current"
+
+  # prevent bringing back locally deleted files
+  comm -23 $DOTDIR/tree-prev $DOTDIR/tree-current >$DOTDIR/fetch-exclude
+
+  # prevent removing new local files
+  comm -13 $DOTDIR/tree-prev $DOTDIR/tree-current >>$DOTDIR/fetch-exclude
+
+  # fetch everything new and updated, locally remove files deleted on remote
+  rsync -auvzxi --delete --exclude $DOTDIR --exclude-from $DOTDIR/fetch-exclude $REMOTE/ . || die
+
+  # send new and updated, remotely remove files deleted locally
+  rsync -auvzxi --delete --exclude $DOTDIR . $REMOTE/ || die
+
+  # prepare for next run
+  rm $DOTDIR/tree-current
+  save_tree "tree-prev"
+
+  rm $LOCK_PATH
+}
+
+function die {
+  rm $LOCK_PATH
+  echo "fatal: command failed"
+  exit 128
+}
+
+if [ "$1" = "init" ]; then
+  init $2
+else
+  sync
+fi

@@ -1,15 +1,9 @@
 require 'fileutils'
 
+BP_BIN_PATH = File.join(File.dirname(__FILE__), '..', 'bin', 'bitpocket')
+
 def sync
-  system "[ -d .sinck ] || mkdir .sinck"
-  system "[ -f .sinck/tree-prev ] || touch .sinck/tree-prev"
-  system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-current"
-  system "comm -23 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >.sinck/fetch-exclude"
-  system "comm -13 .sinck/tree-prev .sinck/tree-current | cut -d '/' -f 2- >>.sinck/fetch-exclude"
-  system "rsync -auvzx --delete --exclude .sinck --exclude-from .sinck/fetch-exclude ../remote/ . &>/dev/null"
-  system "rsync -auvzx --delete --exclude .sinck . ../remote/ &>/dev/null"
-  system "rm .sinck/tree-current"
-  system "find | sort | grep -v ./.sinck | grep -v '^\.$' > .sinck/tree-prev"
+  system "sh #{BP_BIN_PATH} >/dev/null"
 end
 
 def local_path(fname)
@@ -46,11 +40,17 @@ describe 'bitpocket' do
     FileUtils.mkdir_p(@local_dir)
     FileUtils.mkdir_p(@remote_dir)
     Dir.chdir(@local_dir)
+    FileUtils.mkdir_p("#{@local_dir}/.bitpocket")
+    cat 'REMOTE=../remote', local_path('.bitpocket/config')
   end
+
+  let(:content) { 'foo' }
 
   it 'does not remove new local files' do
     touch local_path('a')
+
     sync
+
     File.exist?(local_path('a')).should be(true)
   end
 
@@ -59,102 +59,76 @@ describe 'bitpocket' do
     touch remote_path('a')
     sync
     rm local_path('a')
+
     sync
+
     File.exist?(local_path('a')).should be(false)
   end
 
-  describe 'creating new local file' do
-    before do
-      touch local_path('a')
-    end
+  it 'transfers new file from local to remote' do
+    touch local_path('a')
 
-    it 'transfers new file from local to remote' do
-      sync
+    sync
 
-      File.exist?(local_path('a')).should be(true)
-      File.exist?(remote_path('a')).should be(true)
-    end
+    File.exist?(local_path('a')).should be(true)
+    File.exist?(remote_path('a')).should be(true)
   end
 
-  describe 'updating local file' do
-    let(:content) { 'foo' }
+  it 'transfers updated file from local to remote' do
+    touch local_path('a')
+    touch remote_path('a')
+    sync
+    system "touch -d '00:00' #{remote_path('a')}"
+    cat content, local_path('a')
 
-    before do
-      touch local_path('a')
-      touch remote_path('a')
-      sync
-      system "touch -d '00:00' #{remote_path('a')}"
-      cat content, local_path('a')
-    end
+    sync
 
-    it 'transfers updated file from local to remote' do
-      sync
-
-      File.read(local_path('a')).should == content
-      File.read(remote_path('a')).should == content
-    end
+    File.read(local_path('a')).should == content
+    File.read(remote_path('a')).should == content
   end
 
-  describe 'creating new remote file' do
-    before do
-      touch remote_path('a')
-    end
+  it 'transfers new file from remote to local' do
+    touch remote_path('a')
 
-    it 'transfers new file from remote to local' do
-      sync
+    sync
 
-      File.exist?(local_path('a')).should be(true)
-      File.exist?(remote_path('a')).should be(true)
-    end
+    File.exist?(local_path('a')).should be(true)
+    File.exist?(remote_path('a')).should be(true)
   end
 
-  describe 'updating remote file' do
-    let(:content) { 'foo' }
+  it 'transfers updated file from remote to local' do
+    touch local_path('a')
+    touch remote_path('a')
+    sync
+    cat content, remote_path('a')
 
-    before do
-      touch local_path('a')
-      touch remote_path('a')
-      sync
-      cat content, remote_path('a')
-    end
+    sync
 
-    it 'transfers updated file from remote to local' do
-      sync
-
-      File.read(local_path('a')).should == content
-      File.read(remote_path('a')).should == content
-    end
+    File.read(local_path('a')).should == content
+    File.read(remote_path('a')).should == content
   end
 
-  describe 'deleting local file' do
-    before do
-      touch local_path('a')
-      touch remote_path('a')
-      sync
-      rm local_path('a')
-    end
+  it 'removes file from remote if locally deleted' do
+    touch local_path('a')
+    touch remote_path('a')
+    sync
+    rm local_path('a')
 
-    it 'removes file from remote' do
-      sync
+    sync
 
-      File.exist?(local_path('a')).should be(false)
-      File.exist?(remote_path('a')).should be(false)
-    end
+    File.exist?(local_path('a')).should be(false)
+    File.exist?(remote_path('a')).should be(false)
   end
 
-  describe 'deleting remote file' do
-    before do
-      touch local_path('a')
-      touch remote_path('a')
-      sync
-      rm remote_path('a')
-    end
+  it 'removes file from local if remotelly deleted' do
+    touch local_path('a')
+    touch remote_path('a')
+    sync
+    rm remote_path('a')
 
-    it 'removes file from local' do
-      sync
+    sync
 
-      File.exist?(local_path('a')).should be(false)
-      File.exist?(remote_path('a')).should be(false)
-    end
+    File.exist?(local_path('a')).should be(false)
+    File.exist?(remote_path('a')).should be(false)
   end
 end

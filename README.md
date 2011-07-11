@@ -58,6 +58,12 @@ authentication:
 and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 
 
+## Looking at log
+
+    $ cd ~/BitPocket
+    $ bitpocket log
+
+
 ## Author
 
 Marcin Kulik / <https://github.com/sickill> / <http://ku1ik.com/>

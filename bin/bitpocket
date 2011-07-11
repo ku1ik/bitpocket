@@ -27,15 +27,18 @@ function init {
   echo "Initialized bitpocket directory at `pwd`"
 }
 
+function log {
+  require_dotdir
+
+  tail -f $DOTDIR/log
+}
+
 function save_tree {
   find | sort | cut -d '/' -f 2- | grep -v "^\\$DOTDIR" | grep -v '^\.$' > $DOTDIR/$1
 }
 
 function sync {
-  if [ ! -d $DOTDIR ]; then
-    echo "fatal: Not a bitpocket directory"
-    exit 128
-  fi
+  require_dotdir
 
   [ -f $LOCK_PATH ] && kill -0 $(cat $LOCK_PATH) &>/dev/null && exit 0
   echo $$ > $LOCK_PATH
@@ -67,6 +70,13 @@ function sync {
   rm $LOCK_PATH
 }
 
+function require_dotdir {
+  if [ ! -d $DOTDIR ]; then
+    echo "fatal: Not a bitpocket directory"
+    exit 128
+  fi
+}
+
 function die {
   rm $LOCK_PATH
   echo "fatal: command failed"
@@ -75,6 +85,8 @@ function die {
 
 if [ "$1" = "init" ]; then
   init $2
+elif [ "$1" = "log" ]; then
+  log
 else
   sync
 fi

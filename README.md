@@ -19,7 +19,7 @@ Download script and place it in a directory in your $PATH:
 
 Create empty directory on some host that will be the master copy of your files:
 
-    $ ssh example.org
+    $ ssh user@example.org
     $ mkdir ~/BitPocketMaster
 
 
@@ -29,7 +29,7 @@ On each machine you want to synchronize initialize empty directory as your bitpo
 
     $ mkdir ~/BitPocket
     $ cd ~/BitPocket
-    $ bitpocket init example.org:~/BitPocketMaster
+    $ bitpocket init user@example.org:~/BitPocketMaster
 
 
 ### Manual sync
@@ -54,6 +54,7 @@ authentication:
 
     $ cd ~/BitPocket
     $ ssh-keygen -t rsa -C bitpocket-`hostname` -N '' -f .bitpocket/id_rsa
+    $ ssh-copy-id -i .bitpocket/id_rsa user@example.org
 
 and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 

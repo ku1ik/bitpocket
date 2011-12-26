@@ -1,9 +1,11 @@
 require 'fileutils'
 
 BP_BIN_PATH = File.join(File.dirname(__FILE__), '..', 'bin', 'bitpocket')
+RSYNC_STUB_BIN_PATH = File.join(File.dirname(__FILE__), 'bin')
+PATH = "#{RSYNC_STUB_BIN_PATH}:#{ENV['PATH']}"
 
-def sync
-  system "sh #{BP_BIN_PATH} >/dev/null"
+def sync(opts={})
+  system "CALLBACK=#{opts[:callback]} PATH=#{PATH} sh #{BP_BIN_PATH} >/dev/null"
 end
 
 def local_path(fname)
@@ -54,6 +56,13 @@ describe 'bitpocket' do
     File.exist?(local_path('a')).should be(true)
   end
 
+  it 'does not remove new local files created in parallel with previous sync' do
+    sync(:callback => :add_after)
+    sync
+
+    File.exist?(local_path('after')).should be(true)
+  end
+
   it 'does not bring back removed local files' do
     touch local_path('a')
     touch remote_path('a')
@@ -63,6 +72,15 @@ describe 'bitpocket' do
     sync
 
     File.exist?(local_path('a')).should be(false)
+  end
+
+  it 'does not bring back removed local files deleted in parallel with previous sync' do
+    touch local_path('after')
+    sync
+    sync(:callback => :remove_after)
+    sync
+
+    File.exist?(local_path('after')).should be(false)
   end
 
   it 'transfers new file from local to remote' do

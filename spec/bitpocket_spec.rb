@@ -56,7 +56,7 @@ describe 'bitpocket' do
     File.exist?(local_path('a')).should be(true)
   end
 
-  it 'does not remove new local files created in parallel with previous sync' do
+  it 'does not remove new local files created in parallel to previous sync' do
     sync(:callback => :add_after)
     sync
 
@@ -74,7 +74,7 @@ describe 'bitpocket' do
     File.exist?(local_path('a')).should be(false)
   end
 
-  it 'does not bring back removed local files deleted in parallel with previous sync' do
+  it 'does not bring back removed local files deleted in parallel to previous sync' do
     touch local_path('after')
     sync
     sync(:callback => :remove_after)

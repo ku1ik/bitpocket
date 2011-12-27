@@ -64,10 +64,8 @@ function sync {
   rsync -auvzxi --delete --exclude $DOTDIR . $REMOTE/ || die
 
   # prepare for next run
-  rm $DOTDIR/tree-current
-  save_tree "tree-prev"
-
-  rm $LOCK_PATH
+  mv $DOTDIR/tree-current $DOTDIR/tree-prev
+  cleanup
 }
 
 function require_dotdir {
@@ -77,8 +75,12 @@ function require_dotdir {
   fi
 }
 
-function die {
+function cleanup {
   rm $LOCK_PATH
+}
+
+function die {
+  cleanup
   echo "fatal: command failed"
   exit 128
 }

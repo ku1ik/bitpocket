@@ -81,6 +81,10 @@ function sync {
   release_lock
 }
 
+function cron {
+  DISPLAY=:0.0 sync 2>&1 >>"$DOTDIR/log"
+}
+
 function acquire_lock {
   [ -f "$LOCK_PATH" ] && kill -0 $(cat "$LOCK_PATH") &>/dev/null && exit 0
   echo $$ > "$LOCK_PATH"
@@ -107,6 +111,8 @@ if [ "$1" = "init" ]; then
   init $2
 elif [ "$1" = "log" ]; then
   log
+elif [ "$1" = "cron" ]; then
+  cron
 else
   sync
 fi

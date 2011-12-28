@@ -36,9 +36,7 @@ function log {
 
 function sync {
   assert_dotdir
-
-  [ -f "$LOCK_PATH" ] && kill -0 $(cat "$LOCK_PATH") &>/dev/null && exit 0
-  echo $$ > "$LOCK_PATH"
+  acquire_lock
 
   echo -e "\e[1;32mbitpocket\e[0m started at `date`."
   echo
@@ -59,9 +57,19 @@ function sync {
   # send new and updated, remotely remove files deleted locally
   rsync -auvzxi --delete --exclude "$DOTDIR" . $REMOTE/ || die
 
-  # prepare for next run
+  # save tree state for next run
   mv "$DOTDIR/tree-current" "$DOTDIR/tree-prev"
-  cleanup
+
+  release_lock
+}
+
+function acquire_lock {
+  [ -f "$LOCK_PATH" ] && kill -0 $(cat "$LOCK_PATH") &>/dev/null && exit 0
+  echo $$ > "$LOCK_PATH"
+}
+
+function release_lock {
+  rm "$LOCK_PATH"
 }
 
 function assert_dotdir {
@@ -71,12 +79,8 @@ function assert_dotdir {
   fi
 }
 
-function cleanup {
-  rm "$LOCK_PATH"
-}
-
 function die {
-  cleanup
+  release_lock
   echo "fatal: command failed"
   exit 128
 }

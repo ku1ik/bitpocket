@@ -23,8 +23,14 @@ function init {
 
   mkdir "$DOTDIR"
 
-  echo "REMOTE=\"$1\"" > "$CFG_PATH"
-  echo "# export RSYNC_RSH=\"ssh -i .bitpocket/id_rsa\"" >> "$CFG_PATH"
+  cat <<EOF > "$CFG_PATH"
+REMOTE="$1"
+
+# SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
+# SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
+
+# export RSYNC_RSH="ssh -i .bitpocket/id_rsa"
+EOF
 
   echo "Initialized bitpocket directory at `pwd`"
 }
@@ -51,11 +57,23 @@ function sync {
   # prevent removing new local files
   comm -13 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >>"$DOTDIR/fetch-exclude"
 
+  # fire off sync notifier in background
+  if [ -n "$SYNC_START_CMD" ]; then
+    (eval "$SYNC_START_CMD") &
+    disown
+    shell_pid=$!
+  fi
+
   # fetch everything new and updated, locally remove files deleted on remote
   rsync -auvzxi --delete --exclude "$DOTDIR" --exclude-from "$DOTDIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
   rsync -auvzxi --delete --exclude "$DOTDIR" . $REMOTE/ || die
+
+  # stop sync notifier
+  if [ -n "$SYNC_STOP_CMD" ]; then
+    (SHELL_PID=$shell_pid eval "$SYNC_STOP_CMD")
+  fi
 
   # save tree state for next run
   mv "$DOTDIR/tree-current" "$DOTDIR/tree-prev"

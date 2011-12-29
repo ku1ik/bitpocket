@@ -4,9 +4,11 @@ export LC_ALL=C # for stable "sort" output
 
 DOTDIR=.bitpocket
 CFG_FILE="$DOTDIR/config"
-LOCK_FILE="$DOTDIR/lock"
+TMP_DIR="$DOTDIR/tmp"
+STATE_DIR="$DOTDIR/state"
+LOCK_FILE="$TMP_DIR/lock"
 SLOW_SYNC_TIME=10
-SLOW_SYNC_FILE="$DOTDIR/slow"
+SLOW_SYNC_FILE="$TMP_DIR/slow"
 
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
 
@@ -51,14 +53,14 @@ function sync {
   echo
 
   # check what has changed
-  touch "$DOTDIR/tree-prev"
-  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOTDIR" > "$DOTDIR/tree-current"
+  touch "$STATE_DIR/tree-prev"
+  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOTDIR" > "$STATE_DIR/tree-current"
 
   # prevent bringing back locally deleted files
-  comm -23 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >"$DOTDIR/fetch-exclude"
+  comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" >"$TMP_DIR/fetch-exclude"
 
   # prevent removing new local files
-  comm -13 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >>"$DOTDIR/fetch-exclude"
+  comm -13 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" >>"$TMP_DIR/fetch-exclude"
 
   # don't sync user excluded files
   if [ -f "$DOTDIR/exclude" ]; then
@@ -69,7 +71,7 @@ function sync {
   on_slow_sync_start
 
   # fetch everything new and updated, locally remove files deleted on remote
-  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude --exclude-from "$DOTDIR/fetch-exclude" $REMOTE/ . || die
+  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
   rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude . $REMOTE/ || die
@@ -78,7 +80,7 @@ function sync {
   on_slow_sync_stop
 
   # save tree state for next run
-  mv "$DOTDIR/tree-current" "$DOTDIR/tree-prev"
+  mv "$STATE_DIR/tree-current" "$STATE_DIR/tree-prev"
 
   cleanup
 }
@@ -120,6 +122,8 @@ function assert_dotdir {
     echo "fatal: Not a bitpocket directory"
     exit 128
   fi
+  mkdir -p "$TMP_DIR"
+  mkdir -p "$STATE_DIR"
 }
 
 function cleanup {

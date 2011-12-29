@@ -132,6 +132,11 @@ function cleanup {
 
 function die {
   cleanup
+
+  if [ -n "$shell_pid" ]; then
+    kill $shell_pid &>/dev/null
+  fi
+
   echo "fatal: command failed"
   exit 128
 }

@@ -2,10 +2,10 @@
 
 export LC_ALL=C # for stable "sort" output
 
-DOTDIR=.bitpocket
-CFG_FILE="$DOTDIR/config"
-TMP_DIR="$DOTDIR/tmp"
-STATE_DIR="$DOTDIR/state"
+DOT_DIR=.bitpocket
+CFG_FILE="$DOT_DIR/config"
+TMP_DIR="$DOT_DIR/tmp"
+STATE_DIR="$DOT_DIR/state"
 LOCK_FILE="$TMP_DIR/lock"
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
@@ -13,7 +13,7 @@ SLOW_SYNC_FILE="$TMP_DIR/slow"
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
 
 function init {
-  if [[ -d "$DOTDIR" || -f "$CFG_FILE" ]]; then
+  if [[ -d "$DOT_DIR" || -f "$CFG_FILE" ]]; then
     echo "fatal: Current directory already initialized for bitpocket"
     exit 128
   fi
@@ -25,7 +25,7 @@ function init {
     exit 128
   fi
 
-  mkdir "$DOTDIR"
+  mkdir "$DOT_DIR"
 
   cat <<EOF > "$CFG_FILE"
 REMOTE="$1"
@@ -42,7 +42,7 @@ EOF
 
 function log {
   assert_dotdir
-  tail -f "$DOTDIR/log"
+  tail -f "$DOT_DIR/log"
 }
 
 function sync {
@@ -54,7 +54,7 @@ function sync {
 
   # check what has changed
   touch "$STATE_DIR/tree-prev"
-  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOTDIR" > "$STATE_DIR/tree-current"
+  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOT_DIR" > "$STATE_DIR/tree-current"
 
   # prevent bringing back locally deleted files
   comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" >"$TMP_DIR/fetch-exclude"
@@ -63,18 +63,18 @@ function sync {
   comm -13 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" >>"$TMP_DIR/fetch-exclude"
 
   # don't sync user excluded files
-  if [ -f "$DOTDIR/exclude" ]; then
-    user_exclude="--exclude-from $DOTDIR/exclude"
+  if [ -f "$DOT_DIR/exclude" ]; then
+    user_exclude="--exclude-from $DOT_DIR/exclude"
   fi
 
   # fire off slow sync start notifier in background
   on_slow_sync_start
 
   # fetch everything new and updated, locally remove files deleted on remote
-  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
+  rsync -auvzxi --delete --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
-  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude . $REMOTE/ || die
+  rsync -auvzxi --delete --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
 
   # fire off slow sync stop notifier in background
   on_slow_sync_stop
@@ -105,7 +105,7 @@ function on_slow_sync_stop {
 }
 
 function cron {
-  DISPLAY=:0.0 sync 2>&1 >>"$DOTDIR/log"
+  DISPLAY=:0.0 sync 2>&1 >>"$DOT_DIR/log"
 }
 
 function acquire_lock {
@@ -118,7 +118,7 @@ function release_lock {
 }
 
 function assert_dotdir {
-  if [ ! -d "$DOTDIR" ]; then
+  if [ ! -d "$DOT_DIR" ]; then
     echo "fatal: Not a bitpocket directory"
     exit 128
   fi

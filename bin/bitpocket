@@ -60,14 +60,19 @@ function sync {
   # prevent removing new local files
   comm -13 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >>"$DOTDIR/fetch-exclude"
 
+  # don't sync user excluded files
+  if [ -f "$DOTDIR/exclude" ]; then
+    user_exclude="--exclude-from $DOTDIR/exclude"
+  fi
+
   # fire off slow sync start notifier in background
   on_slow_sync_start
 
   # fetch everything new and updated, locally remove files deleted on remote
-  rsync -auvzxi --delete --exclude "$DOTDIR" --exclude-from "$DOTDIR/fetch-exclude" $REMOTE/ . || die
+  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude --exclude-from "$DOTDIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
-  rsync -auvzxi --delete --exclude "$DOTDIR" . $REMOTE/ || die
+  rsync -auvzxi --delete --exclude "/$DOTDIR" $user_exclude . $REMOTE/ || die
 
   # fire off slow sync stop notifier in background
   on_slow_sync_stop

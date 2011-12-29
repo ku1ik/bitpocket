@@ -48,6 +48,25 @@ describe 'bitpocket' do
 
   let(:content) { 'foo' }
 
+  it 'does not sync ignored files' do
+    cat "/a\n/b", local_path('.bitpocket/exclude')
+    touch local_path('a')
+    touch remote_path('b')
+
+    sync
+
+    File.exist?(local_path('a')).should be(true)
+    File.exist?(remote_path('a')).should be(false)
+    File.exist?(local_path('b')).should be(false)
+    File.exist?(remote_path('b')).should be(true)
+  end
+
+  it 'does not sync .bitpocket dir' do
+    sync
+
+    File.exist?(remote_path('.bitpocket')).should be(false)
+  end
+
   it 'does not remove new local files' do
     touch local_path('a')
 
@@ -138,7 +157,7 @@ describe 'bitpocket' do
     File.exist?(remote_path('a')).should be(false)
   end
 
-  it 'removes file from local if remotelly deleted' do
+  it 'removes file from local if remotely deleted' do
     touch local_path('a')
     touch remote_path('a')
     sync

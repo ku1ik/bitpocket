@@ -39,18 +39,18 @@ On each machine you want to synchronize initialize empty directory as your bitpo
 
 ### Manual sync
 
-Now whenever you want to sync with master just run _bitpocket_ inside your
+Now whenever you want to sync with master just run _bitpocket sync_ inside your
 bitpocket directory:
 
     $ cd ~/BitPocket
-    $ bitpocket
+    $ bitpocket sync
 
 
 ### Automatic sync with cron
 
-Add following line to your crontab to run bitpocket as often as desired:
+Add following line to your crontab to run bitpocket every 5 minutes:
 
-    */5 * * * * (cd ~/BitPocket; nice ~/bin/bitpocket >>.bitpocket/log)
+    */5 * * * * cd ~/BitPocket && nice ~/bin/bitpocket cron
 
 Note that cron usually has very limited environment and your ssh keys with
 passhrases won't work in cron jobs as ssh-agents/keyrings don't work there.
@@ -64,7 +64,28 @@ authentication:
 and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 
 
-## Looking at log
+### Slow sync callbacks
+
+When syncing takes more than 10 seconds (SLOW\_SYNC\_TIME setting) bitpocket
+can fire off user provided command in background. This can be usefull to notify
+user about long sync happening, preventing him from turning off the machine
+during sync etc.
+
+There are 3 settings that can be enabled in _.bitpocket/config_ file:
+
+    # SLOW_SYNC_TIME=10
+    # SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
+    # SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
+
+Just uncomment them and change at will.
+
+You can show tray icon during long sync with
+[traytor](https://github.com/sickill/traytor) and following settings:
+
+    SLOW_SYNC_START_CMD='~/bin/traytor -t "BitPocket syncing..." -c "xdg-open ." .bitpocket/icons & echo $! >.bitpocket/traytor.pid'
+    SLOW_SYNC_STOP_CMD='kill `cat .bitpocket/traytor.pid`'
+
+## Displaying logs
 
     $ cd ~/BitPocket
     $ bitpocket log

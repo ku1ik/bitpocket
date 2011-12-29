@@ -3,13 +3,15 @@
 export LC_ALL=C # for stable "sort" output
 
 DOTDIR=.bitpocket
-CFG_PATH="$DOTDIR/config"
-LOCK_PATH="$DOTDIR/lock"
+CFG_FILE="$DOTDIR/config"
+LOCK_FILE="$DOTDIR/lock"
+SLOW_SYNC_TIME=10
+SLOW_SYNC_FILE="$DOTDIR/slow"
 
-[ -f "$CFG_PATH" ] && . "$CFG_PATH"
+[ -f "$CFG_FILE" ] && . "$CFG_FILE"
 
 function init {
-  if [[ -d "$DOTDIR" || -f "$CFG_PATH" ]]; then
+  if [[ -d "$DOTDIR" || -f "$CFG_FILE" ]]; then
     echo "fatal: Current directory already initialized for bitpocket"
     exit 128
   fi
@@ -23,11 +25,12 @@ function init {
 
   mkdir "$DOTDIR"
 
-  cat <<EOF > "$CFG_PATH"
+  cat <<EOF > "$CFG_FILE"
 REMOTE="$1"
 
-# SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
-# SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
+# SLOW_SYNC_TIME=10
+# SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
+# SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
 
 # export RSYNC_RSH="ssh -i .bitpocket/id_rsa"
 EOF
@@ -57,12 +60,8 @@ function sync {
   # prevent removing new local files
   comm -13 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >>"$DOTDIR/fetch-exclude"
 
-  # fire off sync notifier in background
-  if [ -n "$SYNC_START_CMD" ]; then
-    (eval "$SYNC_START_CMD") &
-    disown
-    shell_pid=$!
-  fi
+  # fire off slow sync start notifier in background
+  on_slow_sync_start
 
   # fetch everything new and updated, locally remove files deleted on remote
   rsync -auvzxi --delete --exclude "$DOTDIR" --exclude-from "$DOTDIR/fetch-exclude" $REMOTE/ . || die
@@ -70,15 +69,32 @@ function sync {
   # send new and updated, remotely remove files deleted locally
   rsync -auvzxi --delete --exclude "$DOTDIR" . $REMOTE/ || die
 
-  # stop sync notifier
-  if [ -n "$SYNC_STOP_CMD" ]; then
-    (SHELL_PID=$shell_pid eval "$SYNC_STOP_CMD")
-  fi
+  # fire off slow sync stop notifier in background
+  on_slow_sync_stop
 
   # save tree state for next run
   mv "$DOTDIR/tree-current" "$DOTDIR/tree-prev"
 
-  release_lock
+  cleanup
+}
+
+function on_slow_sync_start {
+  if [ -n "$SLOW_SYNC_START_CMD" ]; then
+    rm -rf "$SLOW_SYNC_FILE"
+    (sleep $SLOW_SYNC_TIME && touch "$SLOW_SYNC_FILE" && eval "$SLOW_SYNC_START_CMD") &
+    disown
+    shell_pid=$!
+  fi
+}
+
+function on_slow_sync_stop {
+  if [ -n "$shell_pid" ]; then
+    kill $shell_pid &>/dev/null
+
+    if [[ -n "$SLOW_SYNC_STOP_CMD" && -f "$SLOW_SYNC_FILE" ]]; then
+      (eval "$SLOW_SYNC_STOP_CMD") &
+    fi
+  fi
 }
 
 function cron {
@@ -86,12 +102,12 @@ function cron {
 }
 
 function acquire_lock {
-  [ -f "$LOCK_PATH" ] && kill -0 $(cat "$LOCK_PATH") &>/dev/null && exit 0
-  echo $$ > "$LOCK_PATH"
+  [ -f "$LOCK_FILE" ] && kill -0 $(cat "$LOCK_FILE") &>/dev/null && exit 0
+  echo $$ > "$LOCK_FILE"
 }
 
 function release_lock {
-  rm "$LOCK_PATH"
+  rm "$LOCK_FILE"
 }
 
 function assert_dotdir {
@@ -101,8 +117,12 @@ function assert_dotdir {
   fi
 }
 
-function die {
+function cleanup {
   release_lock
+}
+
+function die {
+  cleanup
   echo "fatal: command failed"
   exit 128
 }

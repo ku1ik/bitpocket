@@ -52,7 +52,7 @@ function sync {
 
   # check what has changed
   touch "$DOTDIR/tree-prev"
-  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOTDIR" | grep -v '^\.$' > "$DOTDIR/tree-current"
+  find | sort | cut -d '.' -f 2- | grep -v "^\\$DOTDIR" > "$DOTDIR/tree-current"
 
   # prevent bringing back locally deleted files
   comm -23 "$DOTDIR/tree-prev" "$DOTDIR/tree-current" >"$DOTDIR/fetch-exclude"

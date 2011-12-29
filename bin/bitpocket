@@ -88,7 +88,7 @@ function sync {
 function on_slow_sync_start {
   if [ -n "$SLOW_SYNC_START_CMD" ]; then
     rm -rf "$SLOW_SYNC_FILE"
-    (sleep $SLOW_SYNC_TIME && touch "$SLOW_SYNC_FILE" && eval "$SLOW_SYNC_START_CMD") &
+    (sleep $SLOW_SYNC_TIME && touch "$SLOW_SYNC_FILE" && eval "$SLOW_SYNC_START_CMD" ; wait) &
     disown
     shell_pid=$!
   fi
@@ -134,6 +134,7 @@ function die {
   cleanup
 
   if [ -n "$shell_pid" ]; then
+    pkill -P $shell_pid &>/dev/null
     kill $shell_pid &>/dev/null
   fi
 

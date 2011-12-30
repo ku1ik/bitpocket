@@ -53,7 +53,7 @@ Add following line to your crontab to synchronize every 5 minutes:
     */5 * * * * cd ~/BitPocket && nice ~/bin/bitpocket cron
 
 Note that cron usually has very limited environment and your ssh keys with
-passhrases won't work in cron jobs as ssh-agents/keyrings don't work there.
+passphrases won't work in cron jobs as ssh-agents/keyrings don't work there.
 Thus it's preferable to generate passphrase-less ssh key for bitpocket
 authentication:
 

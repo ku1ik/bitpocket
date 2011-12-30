@@ -48,7 +48,7 @@ bitpocket directory:
 
 ### Automatic sync with cron
 
-Add following line to your crontab to run bitpocket every 5 minutes:
+Add following line to your crontab to synchronize every 5 minutes:
 
     */5 * * * * cd ~/BitPocket && nice ~/bin/bitpocket cron
 

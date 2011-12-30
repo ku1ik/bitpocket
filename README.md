@@ -7,6 +7,11 @@ synchronization. It uses _rsync_ to do efficient data transfer and tracks local
 file creation/removal to avoid known rsync problem when doing 2-way syncing
 with deletion.
 
+bitpocket can use any server which you have ssh access to for its central
+storage. If you have gigabytes of free disk space on your hosting server you
+can finally make use of it.
+
+
 ## Installation
 
 Clone repository and symlink `bitpocket` bin to sth in your `$PATH`:

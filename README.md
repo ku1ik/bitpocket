@@ -64,6 +64,23 @@ authentication:
 and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 
 
+## Configuration
+
+### Exclude files
+
+If you want some files to be ignored by bitpocket you can create
+_.bitpocket/exclude_ file and list the paths there:
+
+    *.avi
+    jola
+    /misio.txt
+
+_*.avi_ and _jola_ will be matched anywhere in path, _misio.txt_ will be
+matched at bitpocket root dir (_~/BitPocket/misio.txt_).
+
+This exclude file is passed to `rsync` as `--exclude-from` argument, check `man
+rsync` for _INCLUDE/EXCLUDE PATTERN RULES_.
+
 ### Slow sync callbacks
 
 When syncing takes more than 10 seconds (SLOW\_SYNC\_TIME setting) bitpocket
@@ -87,10 +104,13 @@ You can show tray icon during long sync with
 
 ## Displaying logs
 
+When running bitpocket in cron with `bitpocket cron` it will append its output
+to _.bitpocket/log_ file. You can watch live log with following command:
+
     $ cd ~/BitPocket
     $ bitpocket log
 
 
 ## Author
 
-Marcin Kulik / <https://github.com/sickill> / <http://ku1ik.com/>
+Marcin Kulik | @sickill | https://github.com/sickill | http://ku1ik.com/

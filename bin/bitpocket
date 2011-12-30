@@ -130,17 +130,21 @@ function cleanup {
   release_lock
 }
 
-function die {
-  cleanup
-
+function bring_the_children_let_me_kill_them {
   if [ -n "$shell_pid" ]; then
     pkill -P $shell_pid &>/dev/null
     kill $shell_pid &>/dev/null
   fi
+}
+
+function die {
+  cleanup
+  bring_the_children_let_me_kill_them
 
   echo "fatal: command failed"
   exit 128
 }
+
 
 if [ "$1" = "init" ]; then
   init $2

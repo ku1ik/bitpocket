@@ -71,6 +71,16 @@ and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 
 ## Configuration
 
+### Custom rsync options
+
+You can pass additional switches to `rsync` by setting `RSYNC_OPTS` in
+_.bitpocket/config_ file. Generated config file includes (commented out)
+example setting for dereferencing symlinks:
+
+    # RSYNC_OPTS="L"
+
+Just uncomment it and change at will.
+
 ### Exclude files
 
 If you want some files to be ignored by bitpocket you can create

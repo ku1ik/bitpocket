@@ -34,6 +34,9 @@ REMOTE="$1"
 # SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
 # SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
 
+## Uncomment following line to follow symlinks (transform it into referent file/dir)
+# RSYNC_OPTS="L"
+
 # export RSYNC_RSH="ssh -i .bitpocket/id_rsa"
 EOF
 
@@ -71,10 +74,10 @@ function sync {
   on_slow_sync_start
 
   # fetch everything new and updated, locally remove files deleted on remote
-  rsync -auvzxi --delete --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
-  rsync -auvzxi --delete --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
 
   # fire off slow sync stop notifier in background
   on_slow_sync_stop

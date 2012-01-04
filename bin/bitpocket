@@ -52,7 +52,7 @@ REMOTE_PATH="$2"
 # RSYNC_RSH="ssh -p 22 -i .bitpocket/id_rsa"
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
-# RSYNC_OPTS="L"
+# RSYNC_OPTS="-L"
 
 ## Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10

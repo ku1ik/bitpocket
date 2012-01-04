@@ -48,3 +48,24 @@ RSpec::Matchers.define :exit_with do |expected|
     status == expected
   end
 end
+
+shared_context 'setup' do
+  before(:all) do
+    @tmp_dir = "/tmp/bitpocket-test-#{Time.now.to_i}"
+    @test_case = { :num => 0 }
+  end
+
+  before do
+    @test_case[:num] += 1
+    test_case_dir = File.join(@tmp_dir, @test_case[:num].to_s)
+    @local_dir = File.join(test_case_dir, 'local')
+    @remote_dir = File.join(test_case_dir, 'remote')
+    FileUtils.mkdir_p(@local_dir)
+    FileUtils.mkdir_p(@remote_dir)
+    Dir.chdir(@local_dir)
+    FileUtils.mkdir_p("#{@local_dir}/.bitpocket")
+    cat "REMOTE_PATH=#{@remote_dir}", local_path('.bitpocket/config')
+  end
+
+  let(:content) { 'foo' }
+end

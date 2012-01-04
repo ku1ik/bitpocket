@@ -67,7 +67,9 @@ describe 'bitpocket' do
   it 'does not sync .bitpocket dir' do
     sync.should succeed
 
-    remote_path('.bitpocket').should_not exist
+    %w(config state).each do |f|
+      remote_path(".bitpocket/#{f}").should_not exist
+    end
   end
 
   it 'does not remove new local files' do

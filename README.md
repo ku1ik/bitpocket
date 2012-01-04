@@ -41,6 +41,8 @@ On each machine you want to synchronize initialize empty directory as your bitpo
     $ cd ~/BitPocket
     $ bitpocket init user@example.org:~/BitPocketMaster
 
+You have to edit the config file at .bitpocket/config afterwards.
+
 
 ### Manual sync
 

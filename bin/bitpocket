@@ -29,7 +29,15 @@ function init {
 
   cat <<EOF > "$CFG_FILE"
 REMOTE="$1"
+###IMPORTANT TO SET THE FOLLOWING LINES!
+## Specify all ssh opts to connect to your server
+## e.g. SSH_OPTS="-p 22 -i .bitpocket/id_rsa user@domain"
+SSH_OPTS=""
+##Specify the path to BitPocketMaster
+## e.g. "~/BitPocketMaster"
+BITPOCKETMASTER="~/BitPocketMaster"
 
+##Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10
 # SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
 # SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
@@ -37,10 +45,15 @@ REMOTE="$1"
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="L"
 
-# export RSYNC_RSH="ssh -i .bitpocket/id_rsa"
+## Uncomment to set a ssh port
+# export RSYNC_RSH="ssh -p 22"
+
+## Uncomment to use a certificate for ssh authentification
+# export RSYNC_RSH="ssh -p 22 -i .bitpocket/id_rsa"
 EOF
 
   echo "Initialized bitpocket directory at `pwd`"
+  echo "Please have a look at the config file (.bitpocket/config)"
 }
 
 function log {
@@ -51,6 +64,8 @@ function log {
 function sync {
   assert_dotdir
   acquire_lock
+  assert_remote_dotdir
+  acquire_remote_lock
 
   echo -e "\e[1;32mbitpocket\e[0m started at `date`."
   echo
@@ -112,12 +127,22 @@ function cron {
 }
 
 function acquire_lock {
-  [ -f "$LOCK_FILE" ] && kill -0 $(cat "$LOCK_FILE") &>/dev/null && exit 0
+  [ -f "$LOCK_FILE" ] && echo "There is already an instance of BitPocket syncing this directory." && echo "If you're sure thats wrong, remove $LOCK_FILE and try again." && kill -0 $(cat "$LOCK_FILE") &>/dev/null && exit 0
   echo $$ > "$LOCK_FILE"
 }
 
 function release_lock {
   rm "$LOCK_FILE"
+}
+
+function acquire_remote_lock {
+  ssh $SSH_OPTS "cd $BITPOCKETMASTER && [ -f "$LOCK_FILE" ]" && echo "Another client is syncing with your server. I'll wait 10 seconds and try again." && sleep 10
+  ssh $SSH_OPTS "cd $BITPOCKETMASTER && [ -f "$LOCK_FILE" ]" && echo "Another client is still syncing with your server." && echo "If you're sure thats wrong, remove $LOCK_FILE on server and try again." && kill -0 $(cat "$LOCK_FILE") &>/dev/null && exit 0
+  ssh $SSH_OPTS "cd $BITPOCKETMASTER && echo $$ > "$LOCK_FILE""
+}
+
+function release_remote_lock {
+  ssh $SSH_OPTS "cd $BITPOCKETMASTER && rm "$LOCK_FILE""
 }
 
 function assert_dotdir {
@@ -129,7 +154,12 @@ function assert_dotdir {
   mkdir -p "$STATE_DIR"
 }
 
+function assert_remote_dotdir {
+  ssh $SSH_OPTS "cd $BITPOCKETMASTER && mkdir -p "$TMP_DIR""
+}
+
 function cleanup {
+  release_remote_lock
   release_lock
 }
 

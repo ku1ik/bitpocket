@@ -39,7 +39,7 @@ On each machine you want to synchronize initialize empty directory as your bitpo
 
     $ mkdir ~/BitPocket
     $ cd ~/BitPocket
-    $ bitpocket init user@example.org:~/BitPocketMaster
+    $ bitpocket init user@example.org ~/BitPocketMaster
 
 
 ### Manual sync

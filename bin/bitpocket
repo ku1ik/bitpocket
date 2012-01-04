@@ -2,15 +2,33 @@
 
 export LC_ALL=C # for stable "sort" output
 
+# Paths
 DOT_DIR=.bitpocket
 CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_FILE="$TMP_DIR/lock"
+
+# Default settings
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
+RSYNC_RSH="ssh"
 
+# Load config file
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
+
+# Decide on runner (ssh / bash -c)
+if [ -n "$REMOTE_HOST" ]; then
+  REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
+  REMOTE="$REMOTE_HOST:$REMOTE_PATH"
+else
+  REMOTE_RUNNER="bash -c"
+  REMOTE="$REMOTE_PATH"
+fi
+
+REMOTE_TMP_DIR="$REMOTE_PATH/.bitpocket/tmp"
+
+export RSYNC_RSH
 
 function init {
   if [[ -d "$DOT_DIR" || -f "$CFG_FILE" ]]; then
@@ -18,29 +36,32 @@ function init {
     exit 128
   fi
 
-  if [ -z $1 ]; then
-    echo "usage: bitpocket init <REMOTE>"
-    echo
-    echo "<REMOTE> can be local path or host:path"
+  if [[ $# != 2 ]]; then
+    echo "usage: bitpocket init <REMOTE_HOST> <REMOTE_PATH>"
     exit 128
   fi
 
   mkdir "$DOT_DIR"
 
   cat <<EOF > "$CFG_FILE"
-REMOTE="$1"
+## Host and path of central storage
+REMOTE_HOST=$1
+REMOTE_PATH="$2"
 
-# SLOW_SYNC_TIME=10
-# SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
-# SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
+## SSH command with options for connecting to \$REMOTE
+# RSYNC_RSH="ssh -p 22 -i .bitpocket/id_rsa"
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="L"
 
-# export RSYNC_RSH="ssh -i .bitpocket/id_rsa"
+## Uncomment following lines to get sync notifications
+# SLOW_SYNC_TIME=10
+# SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
+# SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
 EOF
 
   echo "Initialized bitpocket directory at `pwd`"
+  echo "Please have a look at the config file (.bitpocket/config)"
 }
 
 function log {
@@ -51,6 +72,7 @@ function log {
 function sync {
   assert_dotdir
   acquire_lock
+  acquire_remote_lock
 
   echo -e "\e[1;32mbitpocket\e[0m started at `date`."
   echo
@@ -112,12 +134,37 @@ function cron {
 }
 
 function acquire_lock {
-  [ -f "$LOCK_FILE" ] && kill -0 $(cat "$LOCK_FILE") &>/dev/null && exit 0
+  if [ -f "$LOCK_FILE" ]; then
+    kill -0 $(cat "$LOCK_FILE") &>/dev/null
+
+    if [[ $? == 0 ]]; then
+      echo "There's already an instance of BitPocket syncing this directory. Exiting."
+      exit 1
+    else
+      echo "There's stale lock file at $LOCK_FILE. Please remove it and try again."
+      exit 2
+    fi
+  fi
+
   echo $$ > "$LOCK_FILE"
 }
 
 function release_lock {
-  rm "$LOCK_FILE"
+  rm "$LOCK_FILE" &>/dev/null
+}
+
+function acquire_remote_lock {
+  $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && [ ! -f \"$LOCK_FILE\" ] && touch \"$LOCK_FILE\""
+
+  if [[ $? != 0 ]]; then
+    echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+    release_lock
+    exit 3
+  fi
+}
+
+function release_remote_lock {
+  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && rm \"$LOCK_FILE\" &>/dev/null"
 }
 
 function assert_dotdir {
@@ -131,6 +178,7 @@ function assert_dotdir {
 
 function cleanup {
   release_lock
+  release_remote_lock
 }
 
 function bring_the_children_let_me_kill_them {
@@ -150,7 +198,7 @@ function die {
 
 
 if [ "$1" = "init" ]; then
-  init $2
+  init $2 $3 $4
 elif [ "$1" = "log" ]; then
   log
 elif [ "$1" = "cron" ]; then

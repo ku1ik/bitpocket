@@ -18,7 +18,7 @@ function init {
     exit 128
   fi
 
-  if [ -z $1 ] ; then
+  if [ -z $1 ]; then
     echo "usage: bitpocket init <REMOTE>"
     echo
     echo "<REMOTE> can be local path or host:path"
@@ -29,7 +29,7 @@ function init {
 
   cat <<EOF > "$CFG_FILE"
 REMOTE="$1"
-###IMPORTANT TO SET THE FOLLOWING LINE!
+###IMPORTANT TO SET THE FOLLOWING LINES!
 ## Specify all ssh opts to connect to your server
 ## e.g. SSH_OPTS="-p 22 -i .bitpocket/id_rsa user@domain"
 SSH_OPTS=""

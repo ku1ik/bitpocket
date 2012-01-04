@@ -1,32 +1,4 @@
-require 'fileutils'
-
-BP_BIN_PATH = File.join(File.dirname(__FILE__), '..', 'bin', 'bitpocket')
-RSYNC_STUB_BIN_PATH = File.join(File.dirname(__FILE__), 'bin')
-PATH = "#{RSYNC_STUB_BIN_PATH}:#{ENV['PATH']}"
-
-def sync(opts={})
-  system "CALLBACK=#{opts[:callback]} PATH=#{PATH} sh #{BP_BIN_PATH} >/dev/null"
-end
-
-def local_path(fname)
-  "#{@local_dir}/#{fname}"
-end
-
-def remote_path(fname)
-  "#{@remote_dir}/#{fname}"
-end
-
-def touch(path)
-  FileUtils.touch(path)
-end
-
-def cat(content, path)
-  File.open(path, 'w') { |f| f.write content }
-end
-
-def rm(path)
-  FileUtils.rm(path)
-end
+require 'spec_helper'
 
 describe 'bitpocket' do
   before(:all) do
@@ -55,16 +27,16 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(true)
-    File.exist?(remote_path('a')).should be(false)
-    File.exist?(local_path('b')).should be(false)
-    File.exist?(remote_path('b')).should be(true)
+    local_path('a').should exist
+    remote_path('a').should_not exist
+    local_path('b').should_not exist
+    remote_path('b').should exist
   end
 
   it 'does not sync .bitpocket dir' do
     sync
 
-    File.exist?(remote_path('.bitpocket')).should be(false)
+    remote_path('.bitpocket').should_not exist
   end
 
   it 'does not remove new local files' do
@@ -72,14 +44,14 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(true)
+    local_path('a').should exist
   end
 
   it 'does not remove new local files created in parallel to previous sync' do
     sync(:callback => :add_after)
     sync
 
-    File.exist?(local_path('after')).should be(true)
+    local_path('after').should exist
   end
 
   it 'does not bring back removed local files' do
@@ -90,7 +62,7 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(false)
+    local_path('a').should_not exist
   end
 
   it 'does not bring back removed local files deleted in parallel to previous sync' do
@@ -99,7 +71,7 @@ describe 'bitpocket' do
     sync(:callback => :remove_after)
     sync
 
-    File.exist?(local_path('after')).should be(false)
+    local_path('after').should_not exist
   end
 
   it 'transfers new file from local to remote' do
@@ -107,8 +79,8 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(true)
-    File.exist?(remote_path('a')).should be(true)
+    local_path('a').should exist
+    remote_path('a').should exist
   end
 
   it 'transfers updated file from local to remote' do
@@ -129,8 +101,8 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(true)
-    File.exist?(remote_path('a')).should be(true)
+    local_path('a').should exist
+    remote_path('a').should exist
   end
 
   it 'transfers updated file from remote to local' do
@@ -153,8 +125,8 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(false)
-    File.exist?(remote_path('a')).should be(false)
+    local_path('a').should_not exist
+    remote_path('a').should_not exist
   end
 
   it 'removes file from local if remotely deleted' do
@@ -165,7 +137,7 @@ describe 'bitpocket' do
 
     sync
 
-    File.exist?(local_path('a')).should be(false)
-    File.exist?(remote_path('a')).should be(false)
+    local_path('a').should_not exist
+    remote_path('a').should_not exist
   end
 end

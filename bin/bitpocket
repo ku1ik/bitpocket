@@ -26,7 +26,7 @@ else
   REMOTE="$REMOTE_PATH"
 fi
 
-REMOTE_TMP_DIR="$REMOTE_PATH/.bitpocket/tmp"
+REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
 
 export RSYNC_RSH
 
@@ -49,7 +49,7 @@ REMOTE_HOST=$1
 REMOTE_PATH="$2"
 
 ## SSH command with options for connecting to \$REMOTE
-# RSYNC_RSH="ssh -p 22 -i .bitpocket/id_rsa"
+# RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
@@ -61,7 +61,7 @@ REMOTE_PATH="$2"
 EOF
 
   echo "Initialized bitpocket directory at `pwd`"
-  echo "Please have a look at the config file (.bitpocket/config)"
+  echo "Please have a look at the config file ($DOT_DIR/config)"
 }
 
 function log {

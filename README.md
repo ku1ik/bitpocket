@@ -125,6 +125,13 @@ to _.bitpocket/log_ file. You can watch live log with following command:
     $ cd ~/BitPocket
     $ bitpocket log
 
+## File versioning
+
+bitpocket doesn't support any kind of file versioning at the moment. It's just
+a glue script that uses rsync for the real job.
+
+However there is a discussion about possible solutions here:
+[github.com/sickill/bitpocket/issues/15](https://github.com/sickill/bitpocket/issues/15)
 
 ## Author
 

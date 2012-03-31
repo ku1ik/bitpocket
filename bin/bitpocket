@@ -77,22 +77,25 @@ function sync {
   echo -e "\e[1;32mbitpocket\e[0m started at `date`."
   echo
 
-  # check what has changed
+  # Check what has changed
   touch "$STATE_DIR/tree-prev"
+  touch "$STATE_DIR/added-prev"
+
   find . -printf "/%P\0" | egrep -vzZ "^/$DOT_DIR" > "$STATE_DIR/tree-current"
 
-  # prevent bringing back locally deleted files or removing new local files
-  sort -z "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u -z > "$TMP_DIR/fetch-exclude"
+  # Prevent bringing back locally deleted files or removing new local files
+  cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
+  sort -z "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u -z >> "$TMP_DIR/fetch-exclude"
 
-  # don't sync user excluded files
+  # Don't sync user excluded files
   if [ -f "$DOT_DIR/exclude" ]; then
     user_exclude="--exclude-from $DOT_DIR/exclude"
   fi
 
-  # fire off slow sync start notifier in background
+  # Fire off slow sync start notifier in background
   on_slow_sync_start
 
-  # fetch everything new and updated, locally remove files deleted on remote
+  # Fetch everything new and updated, locally remove files deleted on remote
   echo  "Fetching changes from server"
   rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --from0 --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
 
@@ -100,11 +103,18 @@ function sync {
   echo "Pushing changes to server"
   rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --from0 . $REMOTE/ || die
 
-  # fire off slow sync stop notifier in background
+  # Fire off slow sync stop notifier in background
   on_slow_sync_stop
 
-  # save new tree state for next run
-  find . -printf "/%P\0" | egrep -vzZ "^/$DOT_DIR" > "$STATE_DIR/tree-prev"
+  # Save after-sync state
+  find . -printf "/%P\0" | egrep -vzZ "^/$DOT_DIR" > "$TMP_DIR/tree-after"
+
+  # Save all newly created files for next run (to prevent deletion of them)
+  # This includes files created by user in parallel to sync and files fetched from remote
+  comm -23 "$TMP_DIR/tree-after" "$STATE_DIR/tree-current" >"$STATE_DIR/added-prev"
+
+  # Save new tree state for next run
+  cat "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" >"$STATE_DIR/tree-prev"
 
   cleanup
 }

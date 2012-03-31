@@ -18,10 +18,21 @@ describe 'bitpocket excludes' do
     local_path('after').should exist
   end
 
-  it 'does not bring back removed local files' do
+  it 'does not bring back removed local files that were previously created locally' do
     touch local_path('a')
     touch remote_path('a')
     sync.should succeed
+    rm local_path('a')
+
+    sync.should succeed
+
+    local_path('a').should_not exist
+  end
+
+  it 'does not bring back removed local files that came from remote in prev sync' do
+    touch remote_path('a')
+    sync.should succeed
+    local_path('a').should exist
     rm local_path('a')
 
     sync.should succeed

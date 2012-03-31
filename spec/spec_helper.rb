@@ -5,7 +5,7 @@ RSYNC_STUB_BIN_PATH = File.join(File.dirname(__FILE__), 'bin')
 PATH = "#{RSYNC_STUB_BIN_PATH}:#{ENV['PATH']}"
 
 def sync(opts={})
-  system "CALLBACK=#{opts[:callback]} PATH=#{PATH} sh #{BP_BIN_PATH} >/dev/null"
+  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{PATH} sh #{BP_BIN_PATH}' >/dev/null"
   $?.exitstatus
 end
 
@@ -49,15 +49,16 @@ RSpec::Matchers.define :exit_with do |expected|
   end
 end
 
+TEST_CASE = { :num => 0 }
+
 shared_context 'setup' do
   before(:all) do
     @tmp_dir = "/tmp/bitpocket-test-#{Time.now.to_i}"
-    @test_case = { :num => 0 }
   end
 
   before do
-    @test_case[:num] += 1
-    test_case_dir = File.join(@tmp_dir, @test_case[:num].to_s)
+    TEST_CASE[:num] += 1
+    test_case_dir = File.join(@tmp_dir, TEST_CASE[:num].to_s)
     @local_dir = File.join(test_case_dir, 'local')
     @remote_dir = File.join(test_case_dir, 'remote')
     FileUtils.mkdir_p(@local_dir)

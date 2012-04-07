@@ -74,7 +74,7 @@ function sync {
   acquire_lock
   acquire_remote_lock
 
-  echo -e "\e[1;32mbitpocket\e[0m started at `date`."
+  echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m started at `date`."
   echo
 
   # Check what has changed

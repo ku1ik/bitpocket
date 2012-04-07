@@ -111,10 +111,11 @@ function sync {
 
   # Save all newly created files for next run (to prevent deletion of them)
   # This includes files created by user in parallel to sync and files fetched from remote
-  awk -F "\x00" 'BEGIN { RS = "\x00" } ; FNR==NR {arr[$0];next} !( $1 in arr ) { print $1 "\x0" }' "$STATE_DIR/tree-current" "$TMP_DIR/tree-after" > "$STATE_DIR/added-prev"
+  awk 'BEGIN { RS = "\x00" } FNR==NR { arr[$0]; next } !($0 in arr) { print $0 "\x0" }' "$STATE_DIR/tree-current" "$TMP_DIR/tree-after" > "$STATE_DIR/added-prev"
 
   # Save new tree state for next run
-  sort -uzo "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" 
+  sort -uzo "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" "$STATE_DIR/added-prev"
+
   cleanup
 }
 

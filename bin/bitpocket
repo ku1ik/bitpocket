@@ -81,11 +81,11 @@ function sync {
   touch "$STATE_DIR/tree-prev"
   touch "$STATE_DIR/added-prev"
 
-  find . -printf "/%P\0" | egrep -vzZ "^/$DOT_DIR" > "$STATE_DIR/tree-current"
+  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$STATE_DIR/tree-current"
 
   # Prevent bringing back locally deleted files or removing new local files
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
-  sort -z "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u -z >> "$TMP_DIR/fetch-exclude"
+  sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
 
   # Don't sync user excluded files
   if [ -f "$DOT_DIR/exclude" ]; then
@@ -97,17 +97,17 @@ function sync {
 
   # Fetch everything new and updated, locally remove files deleted on remote
   echo  "Fetching changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --from0 --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
 
   # send new and updated, remotely remove files deleted locally
   echo "Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --from0 . $REMOTE/ || die
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop
 
   # Save after-sync state
-  find . -printf "/%P\0" | egrep -vzZ "^/$DOT_DIR" > "$TMP_DIR/tree-after"
+  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$TMP_DIR/tree-after"
 
   # Save all newly created files for next run (to prevent deletion of them)
   # This includes files created by user in parallel to sync and files fetched from remote

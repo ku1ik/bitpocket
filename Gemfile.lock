@@ -10,6 +10,7 @@ GEM
       guard (>= 0.10.0)
     libnotify (0.7.1)
       ffi (~> 1.0.0)
+    rake (0.9.2.2)
     rspec (2.9.0)
       rspec-core (~> 2.9.0)
       rspec-expectations (~> 2.9.0)
@@ -27,4 +28,5 @@ DEPENDENCIES
   guard
   guard-rspec
   libnotify
+  rake
   rspec

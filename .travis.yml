@@ -1,0 +1,7 @@
+language: ruby
+bundler_args: --without development
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install rsync
+rvm:
+  - 1.9.3

@@ -1,5 +1,7 @@
 # bitpocket
 
+[![Build Status](https://secure.travis-ci.org/sickill/bitpocket.png?branch=master)](http://travis-ci.org/sickill/bitpocket)
+
 ## About
 
 **bitpocket** is a small but smart script that does 2-way directory

@@ -70,6 +70,7 @@ function log {
 }
 
 function sync {
+  check_fallback_host
   assert_dotdir
   acquire_lock
   acquire_remote_lock
@@ -205,6 +206,19 @@ function die {
   exit 128
 }
 
+
+function check_fallback_host {
+  if [ -n "$REMOTE_HOST_FALLBACK" ]; then
+    echo "checking fallback host"
+    $REMOTE_RUNNER "echo \"check\" &>/dev/null"
+
+    if [ $? -ne 0 ]; then
+      echo "could not contact $REMOTE_HOST fallback $REMOTE_HOST_FALLBACK enabled"
+      REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST_FALLBACK"
+      REMOTE="$REMOTE_HOST_FALLBACK:$REMOTE_PATH"
+    fi
+  fi
+}
 
 if [ "$1" = "init" ]; then
   init $2 $3 $4

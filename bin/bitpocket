@@ -7,7 +7,7 @@ DOT_DIR=.bitpocket
 CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
-LOCK_FILE="$TMP_DIR/lock"
+LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -143,27 +143,27 @@ function cron {
 }
 
 function acquire_lock {
-  if [ -f "$LOCK_FILE" ]; then
-    kill -0 $(cat "$LOCK_FILE") &>/dev/null
+  if ! mkdir "$LOCK_DIR" 2>/dev/null ; then
+    kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
 
     if [[ $? == 0 ]]; then
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
-      echo "There's stale lock file at $LOCK_FILE. Please remove it and try again."
+      echo "There's stale lock directory at $LOCK_DIR. Please remove it and try again."
       exit 2
     fi
   fi
 
-  echo $$ > "$LOCK_FILE"
+  echo $$ > "$LOCK_DIR/pid"
 }
 
 function release_lock {
-  rm "$LOCK_FILE" &>/dev/null
+  rm "$LOCK_DIR/pid" &>/dev/null && rmdir "$LOCK_DIR" &>/dev/null
 }
 
 function acquire_remote_lock {
-  $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && [ ! -f \"$LOCK_FILE\" ] && touch \"$LOCK_FILE\""
+  $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
 
   if [[ $? != 0 ]]; then
     echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
@@ -173,7 +173,7 @@ function acquire_remote_lock {
 }
 
 function release_remote_lock {
-  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && rm \"$LOCK_FILE\" &>/dev/null"
+  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && rmdir \"$LOCK_DIR\" &>/dev/null"
 }
 
 function assert_dotdir {

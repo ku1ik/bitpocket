@@ -10,8 +10,12 @@ describe 'bitpocket locking' do
   end
 
   it "exits with status 2 when stale lock found" do
-    max_pid = File.read('/proc/sys/kernel/pid_max').to_i
-    cat max_pid, local_path('.bitpocket/tmp/lock/pid')
+    if RUBY_PLATFORM =~ /darwvin/
+      max_pid = `ps a | grep ps | grep -v grep | awk '{print $1}'`.to_i
+    else
+      max_pid = File.read('/proc/sys/kernel/pid_max').to_i
+    end
+    cat max_pid, local_path('.bitpocket/tmp/lock')
 
     sync.should exit_with(2)
   end

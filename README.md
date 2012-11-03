@@ -54,6 +54,8 @@ bitpocket directory:
     $ cd ~/BitPocket
     $ bitpocket sync
 
+Ensure that you run bitpocket at least once while both directories are empty.  You may then move files
+into one of the directories and they will be detected as added.
 
 ### Automatic sync with cron
 

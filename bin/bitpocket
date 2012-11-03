@@ -8,6 +8,8 @@ CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+PRE_HOOK="$DOT_DIR/pre-hook"
+POST_HOOK="$DOT_DIR/post-hook"
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -46,6 +48,7 @@ function init {
   cat <<EOF > "$CFG_FILE"
 ## Host and path of central storage
 REMOTE_HOST=$1
+REMOTE_HOST_FALLBACK=
 REMOTE_PATH="$2"
 
 ## SSH command with options for connecting to \$REMOTE
@@ -77,6 +80,8 @@ function sync {
 
   echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m started at `date`."
   echo
+
+  pre_hook
 
   # Check what has changed
   touch "$STATE_DIR/tree-prev"
@@ -118,6 +123,7 @@ function sync {
   cat "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" >"$STATE_DIR/tree-prev"
 
   cleanup
+  post_hook
 }
 
 function on_slow_sync_start {
@@ -217,6 +223,20 @@ function check_fallback_host {
       REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST_FALLBACK"
       REMOTE="$REMOTE_HOST_FALLBACK:$REMOTE_PATH"
     fi
+  fi
+}
+
+function pre_hook {
+  if [ -f "$PRE_HOOK" ]; then
+    echo "Executing pre-hook script"
+    $PRE_HOOK
+  fi
+}
+
+function post_hook {
+  if [ -f "$POST_HOOK" ]; then
+    echo "Executing post-hook script"
+    $POST_HOOK
   fi
 }
 

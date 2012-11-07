@@ -27,6 +27,10 @@ def cat(content, path)
   File.open(path, 'w') { |f| f.write content }
 end
 
+def mkdir(path)
+  FileUtils.mkdir_p(path)
+end
+
 def rm(path)
   FileUtils.rm(path)
 end

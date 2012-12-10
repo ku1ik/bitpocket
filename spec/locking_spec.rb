@@ -11,6 +11,7 @@ describe 'bitpocket locking' do
 
   it "exits with status 2 when stale lock found" do
     cat max_pid, local_path('.bitpocket/tmp/lock/pid')
+
     sync.should exit_with(2)
   end
 
@@ -31,6 +32,7 @@ describe 'bitpocket locking' do
 
     remote_path('.bitpocket/tmp/lock').should_not exist
   end
+
   def max_pid
     if RUBY_PLATFORM =~ /darwin/
       99998

@@ -13,9 +13,6 @@ bitpocket can use any server which you have ssh access to for its central
 storage. If you have gigabytes of free disk space on your hosting server you
 can finally make use of it.
 
-_If you find this tool interesting please vote on my EuRuKo 2012 talk proposal
- about how I used RSpec to test bitpocket: https://github.com/euruko2012/call-for-proposals/pull/11_.
-
 ## Installation
 
 Clone repository and symlink `bitpocket` bin to sth in your `$PATH`:

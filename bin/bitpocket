@@ -139,7 +139,14 @@ function on_slow_sync_stop {
 }
 
 function cron {
-  DISPLAY=:0.0 sync 2>&1 >>"$DOT_DIR/log"
+  DISPLAY=:0.0 sync 2>&1 | timestamp >>"$DOT_DIR/log"
+}
+
+function timestamp {
+  while read data
+  do
+      echo "[$(date +"%D %T")] $data"
+  done
 }
 
 function acquire_lock {

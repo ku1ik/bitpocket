@@ -47,6 +47,8 @@ fi
 USER_RULES="$user_filter $user_include $user_exclude"
 #echo "$USER_RULES"
   
+TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
+
 export RSYNC_RSH
 
 function init {
@@ -96,6 +98,9 @@ function sync {
   echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m started at `date`."
   echo
 
+  # Fire off slow sync start notifier in background
+  on_slow_sync_start
+
   # Check what has changed
   touch "$STATE_DIR/tree-prev"
   touch "$STATE_DIR/added-prev"
@@ -110,8 +115,18 @@ function sync {
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
   sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
 
-  # Fire off slow sync start notifier in background
-  on_slow_sync_start
+  # It is difficult to only create the backup directory if needed; instead
+  # we always create it, but remove it if it is empty afterwards.
+  mkdir --parents $DOT_DIR/backups/$TIMESTAMP
+
+  # Determine what will be fetched from server and make backup 
+  # copies of any local files to be deleted or overwritten.
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync --dry-run \
+        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
+      | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
+  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
 
   # Actual fetch
   # Pulling changes from server
@@ -122,9 +137,6 @@ function sync {
   # Send new and updated, remotely remove files deleted locally
   # Order of includes/excludes/filters is EXTREMELY important
   rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
-
-  # Fire off slow sync stop notifier in background
-  on_slow_sync_stop
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
@@ -138,6 +150,9 @@ function sync {
 
   # Save new tree state for next run
   cat "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" >"$STATE_DIR/tree-prev"
+
+  # Fire off slow sync stop notifier in background
+  on_slow_sync_stop
 
   cleanup
 }
@@ -231,7 +246,7 @@ function die {
   cleanup
   bring_the_children_let_me_kill_them
 
-  echo "fatal: command failed"
+  echo "fatal: command failed $1"
   exit 128
 }
 

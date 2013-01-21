@@ -28,6 +28,25 @@ fi
 
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
 
+# Don't sync user excluded files
+if [ -f "$DOT_DIR/exclude" ]; then
+  user_exclude="--exclude-from $DOT_DIR/exclude"
+fi
+
+# Specify certain files to include
+if [ -f "$DOT_DIR/include" ]; then
+  user_include="--include-from $DOT_DIR/include"
+fi  
+  
+# Specify rsync filter rules
+if [ -f "$DOT_DIR/filter" ]; then
+  # The underscore (_) is required for correct operation
+  user_filter="--filter merge_$DOT_DIR/filter"
+fi  
+
+USER_RULES="$user_filter $user_include $user_exclude"
+#echo "$USER_RULES"
+  
 export RSYNC_RSH
 
 function init {
@@ -81,33 +100,37 @@ function sync {
   touch "$STATE_DIR/tree-prev"
   touch "$STATE_DIR/added-prev"
 
-  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$STATE_DIR/tree-current"
+  # Save before-sync state
+  # Must be done with rsync itself (rather than find) to respect includes/excludes
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
 
   # Prevent bringing back locally deleted files or removing new local files
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
   sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
 
-  # Don't sync user excluded files
-  if [ -f "$DOT_DIR/exclude" ]; then
-    user_exclude="--exclude-from $DOT_DIR/exclude"
-  fi
-
   # Fire off slow sync start notifier in background
   on_slow_sync_start
 
-  # Fetch everything new and updated, locally remove files deleted on remote
-  echo  "Fetching changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
+  # Actual fetch
+  # Pulling changes from server
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
 
-  # send new and updated, remotely remove files deleted locally
-  echo "Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
+  # Actual push
+  # Send new and updated, remotely remove files deleted locally
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop
 
   # Save after-sync state
-  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$TMP_DIR/tree-after"
+  # Must be done with rsync itself (rather than find) to respect includes/excludes
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$TMP_DIR/tree-after"
 
   # Save all newly created files for next run (to prevent deletion of them)
   # This includes files created by user in parallel to sync and files fetched from remote

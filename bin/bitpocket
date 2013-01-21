@@ -157,6 +157,65 @@ function sync {
   cleanup
 }
 
+
+# Pack backups into a git repository
+function pack {
+    assert_dotdir
+
+    # Git is required for backup packing
+    if [ ! `builtin type -p git` ]; then 
+        echo "fatal: For backup packing, git must be installed"
+        exit 128
+    fi
+
+    # If pack directory is missing, create it and prepare git repo
+    if [ ! -d "$DOT_DIR/pack" ]
+    then
+        mkdir    $DOT_DIR/pack
+        git init $DOT_DIR/pack
+        touch    $DOT_DIR/pack/.git-init-marker
+        (cd $DOT_DIR/pack && git add .) 
+        (cd $DOT_DIR/pack && git commit -a -q -m "INIT")
+    fi
+
+    # If any backups exist, pack them into the repo
+    if [ -d "$DOT_DIR/backups" ] && [ "$(ls -A $DOT_DIR/backups)" ]
+    then
+        for DIR in $DOT_DIR/backups/*
+        do
+            TSTAMP=$(echo $DIR | sed "s|.*/||")
+            if [ "$(ls -A $DIR)" ] 
+            then
+                echo -n "Processing: $TSTAMP ... "
+                echo -n "Moving ... "
+                (cp -rfl $DIR/* $DOT_DIR/pack && rm -rf $DIR)        || die MV 
+                echo -n "Adding ... "
+                (cd $DOT_DIR/pack && git add .)                      || die ADD
+                echo -n "Committing ... "
+                ##(cd $DOT_DIR/pack && git commit -a -m "$TSTAMP")     || die COMMIT
+                # Commit only if repository has uncommitted changes
+                (cd $DOT_DIR/pack \
+                    && git diff-index --quiet HEAD \
+                    || git commit -a -q -m "$TSTAMP" )             || die COMMIT
+                #mv $DIR/* $DOT_DIR/pack                             || die MV 
+                #rmdir $DIR                                     || die RMDIR
+                echo "Done."
+            else
+                echo "Removing empty dir $DIR  ..."
+                rmdir $DIR
+            fi
+        done
+        echo "Running 'git gc' on pack dir"
+        du -hs $DOT_DIR/pack
+        (cd $DOT_DIR/pack && git gc) || die GC
+        du -hs $DOT_DIR/pack
+        echo "All snapshotes packed successfully."
+    else
+        echo "No unpacked backups found ..."
+    fi
+
+}
+
 function on_slow_sync_start {
   if [ -n "$SLOW_SYNC_START_CMD" ]; then
     rm -rf "$SLOW_SYNC_FILE"
@@ -253,6 +312,9 @@ function die {
 
 if [ "$1" = "init" ]; then
   init $2 $3 $4
+elif [ "$1" = "pack" ]; then
+  # Pack backups using git
+  pack
 elif [ "$1" = "log" ]; then
   log
 elif [ "$1" = "cron" ]; then

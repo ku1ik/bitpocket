@@ -45,7 +45,6 @@ if [ -f "$DOT_DIR/filter" ]; then
 fi  
 
 USER_RULES="$user_filter $user_include $user_exclude"
-#echo "$USER_RULES"
   
 TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 
@@ -206,13 +205,10 @@ function pack {
                 echo -n "Adding ... "
                 (cd $DOT_DIR/pack && git add .)                      || die ADD
                 echo -n "Committing ... "
-                ##(cd $DOT_DIR/pack && git commit -a -m "$TSTAMP")     || die COMMIT
                 # Commit only if repository has uncommitted changes
                 (cd $DOT_DIR/pack \
                     && git diff-index --quiet HEAD \
                     || git commit -a -q -m "$TSTAMP" )             || die COMMIT
-                #mv $DIR/* $DOT_DIR/pack                             || die MV 
-                #rmdir $DIR                                     || die RMDIR
                 echo "Done."
             else
                 echo "Removing empty dir $DIR  ..."
@@ -223,7 +219,7 @@ function pack {
         du -hs $DOT_DIR/pack
         (cd $DOT_DIR/pack && git gc) || die GC
         du -hs $DOT_DIR/pack
-        echo "All snapshotes packed successfully."
+        echo "All snapshots packed successfully."
     else
         echo "No unpacked backups found ..."
     fi

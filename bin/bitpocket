@@ -264,7 +264,11 @@ function acquire_lock {
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
-      echo "There's stale lock directory at $LOCK_DIR. Please remove it and try again."
+      echo -e "\x1b\x5b1;31mbitpocket error:\x1b\x5b0m Bitpocket found a stale lock directory:"
+      echo "  | Root dir: $(pwd)"   
+      echo "  | Lock dir: $LOCK_DIR"   
+      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
+      echo "Please remove the lock directory and try again."
       exit 2
     fi
   fi

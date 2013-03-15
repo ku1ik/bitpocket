@@ -30,7 +30,7 @@ Or download script and place it in a directory in your `$PATH`:
 
 ### Setting up master
 
-Create empty directory on some host that will be the master copy of your files:
+Create an empty directory on some host that will be the master copy of your files:
 
     $ ssh user@example.org
     $ mkdir ~/BitPocketMaster
@@ -38,7 +38,7 @@ Create empty directory on some host that will be the master copy of your files:
 
 ### Setting up slaves
 
-On each machine you want to synchronize initialize empty directory as your bitpocket:
+On each machine you want to synchronize initialize an empty directory as your bitpocket:
 
     $ mkdir ~/BitPocket
     $ cd ~/BitPocket
@@ -67,14 +67,16 @@ Running `bitpocket help` will display the following message.
 
 ### Manual sync (bitpocket sync)
 
-Now whenever you want to sync with master just run _bitpocket sync_ inside your
+To synchronize your local slave with master just run _bitpocket sync_ inside your
 bitpocket directory:
 
     $ cd ~/BitPocket
     $ bitpocket sync
 
-Ensure that you run bitpocket at least once while both directories are empty.  You may then move files
-into one of the directories and they will be detected as added.
+Ensure that you run bitpocket at least once immedately after creating a new slave and
+before adding new files to the slave directory. If there are files in the master they
+will be pulled into the slave.  You may then move files into your slave directory and 
+they will be detected as added.
 
 
 ### Maintaining backups (bitpocket pack)
@@ -103,15 +105,16 @@ There is a discussion about potential directions for versioningdirection here:
 
 ### Redirecting output to log file (bitpocket cron)
 
-If bitpocket is run with the cron parameter (_bitpocket cron_), it willperform
+If bitpocket is run with the cron parameter ( _bitpocket cron_ ), it will perform
 a sync, but instead of showing the progress on stdout, it will redirect all 
 output to a log file: 
 
     $ cd ~/BitPocket
     $ bitpocket cron
 
-This is mainly useful when running bitpocket through the _cron_ command. 
-(See "Automatic sync with cron" for more information about how to configure this)
+As the name of this parameter implies, this is mainly useful when running bitpocket
+through the _cron_ command. (See "Automatic sync with cron" for more information 
+about how to configure this).
 
 
 ### Displaying logs (bitpocket log)
@@ -124,7 +127,7 @@ or watch live log as it is generated, with following command:
     $ bitpocket log
 
 
-### Displaying files to be synced (bitpocket list)
+### Displaying list of files to be synchronized (bitpocket list)
 
 You may want to know which files will be synchronized before actually performing
 the syncronization. You can verify which files are in the synchronization set
@@ -182,7 +185,7 @@ _.bitpocket/exclude_ file and list the paths there:
     /misio.txt
 
 _*.avi_ and _jola_ will be matched anywhere in path, _misio.txt_ will be
-matched at bitpocket root dir (_~/BitPocket/misio.txt_).
+matched at bitpocket root dir ( _~/BitPocket/misio.txt_ ).
 
 This exclude file is passed to `rsync` as `--exclude-from` argument, check `man
 rsync` for _INCLUDE/EXCLUDE PATTERN RULES_.

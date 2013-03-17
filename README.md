@@ -73,7 +73,7 @@ bitpocket directory:
     $ cd ~/BitPocket
     $ bitpocket sync
 
-Ensure that you run bitpocket at least once immedately after creating a new slave and
+Ensure that you run bitpocket at least once immediately after creating a new slave and
 before adding new files to the slave directory. If there are files in the master they
 will be pulled into the slave.  You may then move files into your slave directory and 
 they will be detected as added.
@@ -83,14 +83,14 @@ they will be detected as added.
 
 bitpocket does not include a full-fledged versioning system at the moment, but
 it does automatically create a local backup of any files before overwriting or 
-deleting with changes from the BitCoinMaster. These backups are placed into a 
+deleting with changes from the BitPocketMaster. These backups are placed into a 
 timestamped directory (one directory per sync). The path to this directory is:
 
     .bitpocket/backups/YYYY-MM-DD.hhmmss
 
 As these files accumulate, you may want to remove them, but you can also run
-`bitcoin pack` to combine all the backup files into a git repository contained
-within the _.bitcoin_ directory:
+`bitpocket pack` to combine all the backup files into a git repository contained
+within the _.bitpocket_ directory:
 
     $ cd ~/BitPocket
     $ bitpocket pack
@@ -99,7 +99,7 @@ This requires an installation of _git_, but
 allows all the space saving advantages of _git_ when making repeated changes
 to the same files.
 
-There is a discussion about potential directions for versioningdirection here:
+There is a discussion about potential directions for versioning direction here:
 [github.com/sickill/bitpocket/issues/15](https://github.com/sickill/bitpocket/issues/15)
 
 
@@ -198,7 +198,7 @@ there are three files that you can create to change this configuration:
     .bitpocket/filter
 
 Be aware that all the quirks from rsync exclusion/inclusion rules carry over
-into bitbocket. If you decide that you need such advanced configuration, make
+into bitpocket. If you decide that you need such advanced configuration, make
 sure that you understand those rules very well, and consider double checking
 them before syncing by running `bitpocket list`.
 

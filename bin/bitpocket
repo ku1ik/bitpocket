@@ -28,6 +28,26 @@ fi
 
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
 
+# Don't sync user excluded files
+if [ -f "$DOT_DIR/exclude" ]; then
+  user_exclude="--exclude-from $DOT_DIR/exclude"
+fi
+
+# Specify certain files to include
+if [ -f "$DOT_DIR/include" ]; then
+  user_include="--include-from $DOT_DIR/include"
+fi  
+  
+# Specify rsync filter rules
+if [ -f "$DOT_DIR/filter" ]; then
+  # The underscore (_) is required for correct operation
+  user_filter="--filter merge_$DOT_DIR/filter"
+fi  
+
+USER_RULES="$user_filter $user_include $user_exclude"
+  
+TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
+
 export RSYNC_RSH
 
 function init {
@@ -69,45 +89,69 @@ function log {
   tail -f "$DOT_DIR/log"
 }
 
+# Do the actual synchronization
 function sync {
   assert_dotdir
   acquire_lock
   acquire_remote_lock
 
-  echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m started at `date`."
   echo
+  echo -e "\x1b\x5b1;32mbitpocket started\x1b\x5b0m at `date`."
+  echo
+
+  # Fire off slow sync start notifier in background
+  on_slow_sync_start
 
   # Check what has changed
   touch "$STATE_DIR/tree-prev"
   touch "$STATE_DIR/added-prev"
 
-  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$STATE_DIR/tree-current"
+  # Save before-sync state
+  # Must be done with rsync itself (rather than find) to respect includes/excludes
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo "# Saving current state and backing up files (if needed)"
+  echo "  | Root dir: $(pwd)"   
+  rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
 
   # Prevent bringing back locally deleted files or removing new local files
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
   sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
 
-  # Don't sync user excluded files
-  if [ -f "$DOT_DIR/exclude" ]; then
-    user_exclude="--exclude-from $DOT_DIR/exclude"
-  fi
+  # It is difficult to only create the backup directory if needed; instead
+  # we always create it, but remove it if it is empty afterwards.
+  mkdir --parents $DOT_DIR/backups/$TIMESTAMP
 
-  # Fire off slow sync start notifier in background
-  on_slow_sync_start
+  # Determine what will be fetched from server and make backup 
+  # copies of any local files to be deleted or overwritten.
+  # Order of includes/excludes/filters is EXTREMELY important
+  rsync --dry-run \
+        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
+      | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
+  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
 
-  # Fetch everything new and updated, locally remove files deleted on remote
-  echo  "Fetching changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude --exclude-from "$TMP_DIR/fetch-exclude" $REMOTE/ . || die
+  # Actual fetch
+  # Pulling changes from server
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo
+  echo "# Pulling changes from server"
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
 
-  # send new and updated, remotely remove files deleted locally
-  echo "Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $user_exclude . $REMOTE/ || die
-
-  # Fire off slow sync stop notifier in background
-  on_slow_sync_stop
+  # Actual push
+  # Send new and updated, remotely remove files deleted locally
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo
+  echo "# Pushing changes to server"
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
 
   # Save after-sync state
-  find . | sort | cut -d '.' -f 2- | egrep -v "^/$DOT_DIR" > "$TMP_DIR/tree-after"
+  # Must be done with rsync itself (rather than find) to respect includes/excludes
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo
+  echo "# Saving after-sync state and cleaning up"
+  rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$TMP_DIR/tree-after"
 
   # Save all newly created files for next run (to prevent deletion of them)
   # This includes files created by user in parallel to sync and files fetched from remote
@@ -116,7 +160,70 @@ function sync {
   # Save new tree state for next run
   cat "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" >"$STATE_DIR/tree-prev"
 
+  # Fire off slow sync stop notifier in background
+  on_slow_sync_stop
+
   cleanup
+  echo
+  echo -e "\x1b\x5b1;32mbitpocket finished\x1b\x5b0m at `date`."
+  echo
+
+}
+
+
+# Pack backups into a git repository
+function pack {
+    assert_dotdir
+
+    # Git is required for backup packing
+    if [ ! `builtin type -p git` ]; then 
+        echo "fatal: For backup packing, git must be installed"
+        exit 128
+    fi
+
+    # If pack directory is missing, create it and prepare git repo
+    if [ ! -d "$DOT_DIR/pack" ]
+    then
+        mkdir    $DOT_DIR/pack
+        git init $DOT_DIR/pack
+        touch    $DOT_DIR/pack/.git-init-marker
+        (cd $DOT_DIR/pack && git add .) 
+        (cd $DOT_DIR/pack && git commit -a -q -m "INIT")
+    fi
+
+    # If any backups exist, pack them into the repo
+    if [ -d "$DOT_DIR/backups" ] && [ "$(ls -A $DOT_DIR/backups)" ]
+    then
+        for DIR in $DOT_DIR/backups/*
+        do
+            TSTAMP=$(echo $DIR | sed "s|.*/||")
+            if [ "$(ls -A $DIR)" ] 
+            then
+                echo -n "Processing: $TSTAMP ... "
+                echo -n "Moving ... "
+                (cp -rfl $DIR/* $DOT_DIR/pack && rm -rf $DIR)        || die MV 
+                echo -n "Adding ... "
+                (cd $DOT_DIR/pack && git add .)                      || die ADD
+                echo -n "Committing ... "
+                # Commit only if repository has uncommitted changes
+                (cd $DOT_DIR/pack \
+                    && git diff-index --quiet HEAD \
+                    || git commit -a -q -m "$TSTAMP" )             || die COMMIT
+                echo "Done."
+            else
+                echo "Removing empty dir $DIR  ..."
+                rmdir $DIR
+            fi
+        done
+        echo "Running 'git gc' on pack dir"
+        du -hs $DOT_DIR/pack
+        (cd $DOT_DIR/pack && git gc) || die GC
+        du -hs $DOT_DIR/pack
+        echo "All snapshots packed successfully."
+    else
+        echo "No unpacked backups found ..."
+    fi
+
 }
 
 function on_slow_sync_start {
@@ -157,7 +264,11 @@ function acquire_lock {
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
-      echo "There's stale lock directory at $LOCK_DIR. Please remove it and try again."
+      echo -e "\x1b\x5b1;31mbitpocket error:\x1b\x5b0m Bitpocket found a stale lock directory:"
+      echo "  | Root dir: $(pwd)"   
+      echo "  | Lock dir: $LOCK_DIR"   
+      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
+      echo "Please remove the lock directory and try again."
       exit 2
     fi
   fi
@@ -185,7 +296,7 @@ function release_remote_lock {
 
 function assert_dotdir {
   if [ ! -d "$DOT_DIR" ]; then
-    echo "fatal: Not a bitpocket directory"
+    echo "fatal: Not a bitpocket directory. Try 'bitpocket help' for usage."
     exit 128
   fi
   mkdir -p "$TMP_DIR"
@@ -208,17 +319,54 @@ function die {
   cleanup
   bring_the_children_let_me_kill_them
 
-  echo "fatal: command failed"
+  echo "fatal: command failed $1"
   exit 128
 }
 
+# List all files in the sync set
+function list {
+  echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m will sync the following files:"
+  rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort 
+}
+
+function usage {
+  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init <REMOTE_HOST> <REMOTE_PATH>]"
+  echo ""
+  echo "Available commands:"
+  echo "   sync    Run the sync process. If no command is specified, sync is run by default."
+  echo "   init    Initialize a new bitpocket folder. Requires remote host and path params."
+  echo "   pack    Pack any existing (automatic) backups into a git repository."
+  echo "   cron    Run sync optimized for cron, logging output to file instead of stdout."
+  echo "   log     Display the log generated by the cron command"
+  echo "   list    List all files in the sync set (honoring include/exclude/filter config)."
+  echo "   help    Show this message."
+  echo ""
+  echo "Note: All commands (apart from help), must be run in the root of a"
+  echo "      new or existing bitpocket directory structure."
+  echo ""
+
+}
 
 if [ "$1" = "init" ]; then
+  # Initialize bitpocket directory
   init $2 $3 $4
+elif [ "$1" = "pack" ]; then
+  # Pack backups using git
+  pack
 elif [ "$1" = "log" ]; then
+  # Display log file
   log
 elif [ "$1" = "cron" ]; then
+  # Run through cron?
   cron
+elif [ "$1" = "list" ]; then
+  # List all file in sync set (honoring .bitpocket/include & .bitpocket/exclude)
+  list 
+elif [ "$1" != "" ] && [ "$1" != "sync" ]; then
+  # Show help
+  usage
 else
+  # By default, run the sync process
   sync
 fi

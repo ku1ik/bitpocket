@@ -228,3 +228,4 @@ You can show tray icon during long sync with
 ## Author
 
 Marcin Kulik | @sickill | https://github.com/sickill | http://ku1ik.com/
+torfason | https://github.com/torfason

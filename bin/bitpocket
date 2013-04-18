@@ -17,6 +17,15 @@ RSYNC_RSH="ssh"
 # Load config file
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
 
+# Test for GNU versions of core utils. Bail if non-GNU.
+sed --version >/dev/null 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "fatal: It seems like you are running non-GNU versions of coreutils."
+    echo "       It is currently unsafe to use bitpocket with this setup,"
+    echo "       so I'll have to stop here. Sorry ..."
+    exit 1
+fi
+
 # Decide on runner (ssh / bash -c)
 if [ -n "$REMOTE_HOST" ]; then
   REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"

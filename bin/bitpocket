@@ -13,6 +13,7 @@ LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash 
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
+BACKUPS="true"
 
 # Load config file
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
@@ -77,6 +78,9 @@ function init {
 REMOTE_HOST=$1
 REMOTE_PATH="$2"
 
+## file revisioning (everything other than "true" is considered "false")
+BACKUPS="true"
+
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
@@ -118,7 +122,9 @@ function sync {
   # Save before-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
   # Order of includes/excludes/filters is EXTREMELY important
-  echo "# Saving current state and backing up files (if needed)"
+  [ "$BACKUPS" = "true" ] && echo "# Saving current state and backing up files (if needed)" \
+      || echo "# Saving current state"
+
   echo "  | Root dir: $(pwd)"   
   rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
       | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
@@ -127,18 +133,20 @@ function sync {
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
   sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
 
-  # It is difficult to only create the backup directory if needed; instead
-  # we always create it, but remove it if it is empty afterwards.
-  mkdir --parents $DOT_DIR/backups/$TIMESTAMP
+  if [ "$BACKUPS" = "true" ]; then
+    # It is difficult to only create the backup directory if needed; instead
+    # we always create it, but remove it if it is empty afterwards.
+    mkdir --parents $DOT_DIR/backups/$TIMESTAMP
 
-  # Determine what will be fetched from server and make backup 
-  # copies of any local files to be deleted or overwritten.
-  # Order of includes/excludes/filters is EXTREMELY important
-  rsync --dry-run \
+    # Determine what will be fetched from server and make backup
+    # copies of any local files to be deleted or overwritten.
+    # Order of includes/excludes/filters is EXTREMELY important
+    rsync --dry-run \
         -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
       | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
-  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
-  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
+    [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+    [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
+  fi
 
   # Actual fetch
   # Pulling changes from server

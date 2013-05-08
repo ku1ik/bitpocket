@@ -65,8 +65,8 @@ function init {
     exit 128
   fi
 
-  if [[ $# != 2 ]]; then
-    echo "usage: bitpocket init <REMOTE_HOST> <REMOTE_PATH>"
+  if [[ -z "$2" || -n "$3" ]]; then
+    echo "usage: bitpocket init {<REMOTE_HOST> | \"\"} <REMOTE_PATH>"
     exit 128
   fi
 
@@ -77,11 +77,14 @@ function init {
 REMOTE_HOST=$1
 REMOTE_PATH="$2"
 
-## SSH command with options for connecting to \$REMOTE
+## SSH command with options for connecting to \$REMOTE_HOST
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
+
+## Use the following if a FAT or VFAT filesystem is being synchronized
+# RSYNC_OPTS="--no-perms --no-owner --no-group --modify-window=2"
 
 ## Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10
@@ -135,7 +138,7 @@ function sync {
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
   rsync --dry-run \
-        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
+        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES "$REMOTE/" . \
       | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
@@ -145,14 +148,14 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pulling changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES "$REMOTE/" . | sed "s/^/  | /"  || die "PULL"
 
   # Actual push
   # Send new and updated, remotely remove files deleted locally
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . "$REMOTE/" | sed "s/^/  | /" || die "PUSH" 
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
@@ -293,7 +296,7 @@ function acquire_remote_lock {
   $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
 
   if [[ $? != 0 ]]; then
-    echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+    echo "Couldn't acquire remote lock. Another client is syncing with \"$REMOTE\" or lock file couldn't be created. Exiting."
     release_lock
     exit 3
   fi
@@ -340,7 +343,8 @@ function list {
 }
 
 function usage {
-  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init <REMOTE_HOST> <REMOTE_PATH>]"
+  echo "usage:  bitpocket [sync | help | pack | log | cron | list]"
+  echo "        bitpocket init {<REMOTE_HOST> | \"\"} <REMOTE_PATH>"
   echo ""
   echo "Available commands:"
   echo "   sync    Run the sync process. If no command is specified, sync is run by default."
@@ -359,7 +363,7 @@ function usage {
 
 if [ "$1" = "init" ]; then
   # Initialize bitpocket directory
-  init $2 $3 $4
+  init "$2" "$3" "$4"
 elif [ "$1" = "pack" ]; then
   # Pack backups using git
   pack

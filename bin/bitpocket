@@ -138,7 +138,7 @@ function sync {
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
   rsync --dry-run \
-        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
+        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES "$REMOTE/" . \
       | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
@@ -148,14 +148,14 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pulling changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES "$REMOTE/" . | sed "s/^/  | /"  || die "PULL"
 
   # Actual push
   # Send new and updated, remotely remove files deleted locally
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . "$REMOTE/" | sed "s/^/  | /" || die "PUSH" 
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
@@ -296,7 +296,7 @@ function acquire_remote_lock {
   $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
 
   if [[ $? != 0 ]]; then
-    echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+    echo "Couldn't acquire remote lock. Another client is syncing with \"$REMOTE\" or lock file couldn't be created. Exiting."
     release_lock
     exit 3
   fi

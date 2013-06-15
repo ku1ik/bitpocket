@@ -1,7 +1,7 @@
-# bitpocket
+# bitpocket fork by deajan
 
-[![Build Status](https://secure.travis-ci.org/sickill/bitpocket.png?branch=master)](http://travis-ci.org/sickill/bitpocket)
-
+This is a bitpocket fork to address some issues of the original bitpocket project for my own usage.
+Nothing really new yet.
 
 ## About
 

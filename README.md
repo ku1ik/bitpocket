@@ -19,12 +19,12 @@ can finally make use of it.
 
 Clone repository and symlink `bitpocket` bin to sth in your `$PATH`:
 
-    $ git clone git://github.com/sickill/bitpocket.git
+    $ git clone git://github.com/deajan/bitpocket.git
     $ ln -s `pwd`/bitpocket/bin/bitpocket ~/bin/bitpocket
 
 Or download script and place it in a directory in your `$PATH`:
 
-    $ curl -sL https://raw.github.com/sickill/bitpocket/master/bin/bitpocket > ~/bin/bitpocket
+    $ curl -sL https://raw.github.com/deajan/bitpocket/master/bin/bitpocket > ~/bin/bitpocket
     $ chmod +x ~/bin/bitpocket
 
 
@@ -50,7 +50,7 @@ On each machine you want to synchronize initialize an empty directory as your bi
 After installation, you use the `bitpocket` command for synchronization and other tasks.
 Running `bitpocket help` will display the following message.
 
-    usage:  bitpocket [sync|help|pack|log|cron|list|init <REMOTE_HOST> <REMOTE_PATH>]
+    usage:  bitpocket [sync|help|pack|log|cron|list|init <REMOTE_HOST> <REMOTE_PATH> [REMOTE_PORT] ]
 
     Available commands:
        sync    Run the sync process. If no command is specified, sync is run by default.
@@ -229,3 +229,6 @@ You can show tray icon during long sync with
 
 * Marcin Kulik | @sickill | https://github.com/sickill | http://ku1ik.com/
 * torfason | https://github.com/torfason
+* 
+Fork additions by Orsiris "Ozy" de Jong
+ozy@badministrateur.com

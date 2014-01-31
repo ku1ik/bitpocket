@@ -136,7 +136,7 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   rsync --dry-run \
         -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
-      | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
+      | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed 's:\d96:\\\`:g' | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
   [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
 

@@ -1,6 +1,11 @@
 #!/bin/bash
 
-export LC_ALL=en_US.utf-8 # Allow filenames with accents and other special characters
+LANG=$(locale | grep LANG= | sed 's:LANG=::')
+if [ -z "$LANG" ]; then
+    LANG="C"
+fi
+
+export LC_ALL=$LANG # for stable "sort" output
 
 # Paths
 DOT_DIR=.bitpocket

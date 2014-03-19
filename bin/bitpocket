@@ -125,7 +125,7 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   echo "# Saving current state and backing up files (if needed)"
   echo "  | Root dir: $(pwd)"   
-  rsync -av --list-only --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES . | grep "^-\|^d|^l" \
+  rsync -av --list-only --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES . | grep "^-\|^d\|^l" \
       | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:->.*::" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
 
   # Prevent bringing back locally deleted files or removing new local files

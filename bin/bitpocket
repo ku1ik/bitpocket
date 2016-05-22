@@ -28,6 +28,7 @@ if [ $? -ne 0 ]; then
     echo "fatal: It seems like you are running non-GNU versions of coreutils."
     echo "       It is currently unsafe to use bitpocket with this setup,"
     echo "       so I'll have to stop here. Sorry ..."
+    echo "       Please visit http://apple.stackexchange.com/a/88812/33076 to set them up on osx."
     exit 1
 fi
 
@@ -50,16 +51,16 @@ fi
 # Specify certain files to include
 if [ -f "$DOT_DIR/include" ]; then
   user_include="--include-from $DOT_DIR/include"
-fi  
-  
+fi
+
 # Specify rsync filter rules
 if [ -f "$DOT_DIR/filter" ]; then
   # The underscore (_) is required for correct operation
   user_filter="--filter merge_$DOT_DIR/filter"
-fi  
+fi
 
 USER_RULES="$user_filter $user_include $user_exclude"
-  
+
 TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 
 export RSYNC_RSH
@@ -124,7 +125,7 @@ function sync {
   # Must be done with rsync itself (rather than find) to respect includes/excludes
   # Order of includes/excludes/filters is EXTREMELY important
   echo "# Saving current state and backing up files (if needed)"
-  echo "  | Root dir: $(pwd)"   
+  echo "  | Root dir: $(pwd)"
   rsync -av --list-only --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES . | grep "^-\|^d" \
       | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
 
@@ -134,9 +135,9 @@ function sync {
 
   # It is difficult to only create the backup directory if needed; instead
   # we always create it, but remove it if it is empty afterwards.
-  mkdir --parents $DOT_DIR/backups/$TIMESTAMP
+  mkdir -p $DOT_DIR/backups/$TIMESTAMP
 
-  # Determine what will be fetched from server and make backup 
+  # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
   rsync --dry-run \
@@ -157,7 +158,7 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH" 
+  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH"
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
@@ -190,7 +191,7 @@ function pack {
     assert_dotdir
 
     # Git is required for backup packing
-    if [ ! `builtin type -p git` ]; then 
+    if [ ! `builtin type -p git` ]; then
         echo "fatal: For backup packing, git must be installed"
         exit 128
     fi
@@ -201,7 +202,7 @@ function pack {
         mkdir    $DOT_DIR/pack
         git init $DOT_DIR/pack
         touch    $DOT_DIR/pack/.git-init-marker
-        (cd $DOT_DIR/pack && git add .) 
+        (cd $DOT_DIR/pack && git add .)
         (cd $DOT_DIR/pack && git commit -a -q -m "INIT")
     fi
 
@@ -211,11 +212,11 @@ function pack {
         for DIR in $DOT_DIR/backups/*
         do
             TSTAMP=$(echo $DIR | sed "s|.*/||")
-            if [ "$(ls -A $DIR)" ] 
+            if [ "$(ls -A $DIR)" ]
             then
                 echo -n "Processing: $TSTAMP ... "
                 echo -n "Moving ... "
-                (cp -rfl $DIR/* $DOT_DIR/pack && rm -rf $DIR)        || die MV 
+                (cp -rfl $DIR/* $DOT_DIR/pack && rm -rf $DIR)        || die MV
                 echo -n "Adding ... "
                 (cd $DOT_DIR/pack && git add .)                      || die ADD
                 echo -n "Committing ... "
@@ -279,8 +280,8 @@ function acquire_lock {
       exit 1
     else
       echo -e "\x1b\x5b1;31mbitpocket error:\x1b\x5b0m Bitpocket found a stale lock directory:"
-      echo "  | Root dir: $(pwd)"   
-      echo "  | Lock dir: $LOCK_DIR"   
+      echo "  | Root dir: $(pwd)"
+      echo "  | Lock dir: $LOCK_DIR"
       echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
       echo "Please remove the lock directory and try again."
       exit 2
@@ -341,7 +342,7 @@ function die {
 function list {
   echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m will sync the following files:"
   rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
-      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort 
+      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort
 }
 
 function usage {
@@ -364,7 +365,7 @@ function usage {
 
 if [ "$1" = "init" ]; then
   # Initialize bitpocket directory
-  init $2 $3 $4
+  init $2 "$3" $4
 elif [ "$1" = "pack" ]; then
   # Pack backups using git
   pack
@@ -376,7 +377,7 @@ elif [ "$1" = "cron" ]; then
   cron
 elif [ "$1" = "list" ]; then
   # List all file in sync set (honoring .bitpocket/include & .bitpocket/exclude)
-  list 
+  list
 elif [ "$1" != "" ] && [ "$1" != "sync" ]; then
   # Show help
   usage

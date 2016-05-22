@@ -134,7 +134,7 @@ function sync {
 
   # It is difficult to only create the backup directory if needed; instead
   # we always create it, but remove it if it is empty afterwards.
-  mkdir --parents $DOT_DIR/backups/$TIMESTAMP
+  mkdir -p $DOT_DIR/backups/$TIMESTAMP
 
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.

@@ -28,6 +28,7 @@ if [ $? -ne 0 ]; then
     echo "fatal: It seems like you are running non-GNU versions of coreutils."
     echo "       It is currently unsafe to use bitpocket with this setup,"
     echo "       so I'll have to stop here. Sorry ..."
+    echo "       Please visit http://apple.stackexchange.com/a/88812/33076 to set them up on osx."
     exit 1
 fi
 

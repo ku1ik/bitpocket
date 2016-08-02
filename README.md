@@ -1,3 +1,5 @@
+[Maintainers needed!](https://github.com/sickill/bitpocket/issues/58)
+
 # bitpocket
 
 [![Build Status](https://secure.travis-ci.org/sickill/bitpocket.png?branch=master)](http://travis-ci.org/sickill/bitpocket)

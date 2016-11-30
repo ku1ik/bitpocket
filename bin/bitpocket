@@ -104,6 +104,24 @@ function log {
   tail -f "$DOT_DIR/log"
 }
 
+function pull() {
+  # Actual fetch
+  # Pulling changes from server
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo
+  echo "# Pulling changes from server"
+  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
+}
+
+function push() {
+  # Actual push
+  # Send new and updated, remotely remove files deleted locally
+  # Order of includes/excludes/filters is EXTREMELY important
+  echo
+  echo "# Pushing changes to server"
+  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH"
+}
+
 # Do the actual synchronization
 function sync {
   assert_dotdir
@@ -126,12 +144,24 @@ function sync {
   # Order of includes/excludes/filters is EXTREMELY important
   echo "# Saving current state and backing up files (if needed)"
   echo "  | Root dir: $(pwd)"
-  rsync -av --list-only --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES . | grep "^-\|^d" \
-      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$STATE_DIR/tree-current"
 
-  # Prevent bringing back locally deleted files or removing new local files
+  # Collect the current snapshot of the local tree
+  rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
+      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$STATE_DIR/tree-current"
+
+  # Collect the current snapshot of the remote tree
+  rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ | grep "^-\|^d" \
+      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$STATE_DIR/remote-tree-current" &
+  local remote_tree_pid=$!
+
+  # Prevent bringing back locally deleted files
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
-  sort "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | uniq -u >> "$TMP_DIR/fetch-exclude"
+  comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | sed -e "s:^[^/]*::" >> "$TMP_DIR/fetch-exclude"
+
+  # Prevent deleting local files which were not deleted remotely
+  # ie. Prevent deleting newly added local files
+  wait $remote_tree_pid
+  comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" >> "$TMP_DIR/fetch-exclude"
 
   # It is difficult to only create the backup directory if needed; instead
   # we always create it, but remove it if it is empty afterwards.
@@ -141,24 +171,24 @@ function sync {
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
   rsync --dry-run \
-        -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . \
-      | grep "^[ch<>\.\*][f]\|\*deleting" | sed "s:^\S*\s*::" | sed 's:\d96:\\\`:g' | sed "s:\(.*\):if [ -f \"\1\" ]; then cp --parents \"\1\" $DOT_DIR/backups/$TIMESTAMP; fi:" | sh || die "BACKUP"
-  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
-  [ "$(ls -A $DOT_DIR/backups/$TIMESTAMP)" ] || rmdir $DOT_DIR/backups/$TIMESTAMP
+        -auzxi --delete --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" \
+        $USER_RULES $REMOTE/ . \
+  | while read line; do
+    if [[ "$line" =~ ^[ch\<\>]f(cs|.s|c.)|^\*deleting ]]; then
+      filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+      if [ -f "$filename" ]; then
+        echo "  | $filename"
+        cp --parents "$filename" "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
+      fi
+    fi
+  done
+  if [ "$(ls -A "$DOT_DIR"/backups/$TIMESTAMP)" ]; then
+    echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+  else
+    rmdir "$DOT_DIR"/backups/$TIMESTAMP
+  fi
 
-  # Actual fetch
-  # Pulling changes from server
-  # Order of includes/excludes/filters is EXTREMELY important
-  echo
-  echo "# Pulling changes from server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
-
-  # Actual push
-  # Send new and updated, remotely remove files deleted locally
-  # Order of includes/excludes/filters is EXTREMELY important
-  echo
-  echo "# Pushing changes to server"
-  rsync -auvzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH"
+  pull && push
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes

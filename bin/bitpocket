@@ -192,7 +192,7 @@ function sync {
       filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
       if [[ -f "$filename" ]]; then
         echo "  \`- $filename"
-        cp --parents -p "$filename" "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
+        cp --parents -p --reflink=auto "$filename" "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
       fi
     fi
   done

@@ -217,7 +217,7 @@ function sync {
   comm -23 "$TMP_DIR/tree-after" "$STATE_DIR/tree-current" >"$STATE_DIR/added-prev"
 
   # Save new tree state for next run
-  cat "$STATE_DIR/tree-current" "$STATE_DIR/added-prev" >"$STATE_DIR/tree-prev"
+  mv "$TMP_DIR/tree-after" "$STATE_DIR/tree-prev"
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop

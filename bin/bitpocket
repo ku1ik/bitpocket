@@ -110,7 +110,10 @@ function pull() {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pulling changes from server"
-  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" $USER_RULES $REMOTE/ . | sed "s/^/  | /"  || die "PULL"
+  cat "$STATE_DIR/added-prev" \
+  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+      --exclude-from - $USER_RULES $REMOTE/ . \
+  | sed "s/^/  | /"  || die "PULL"
 }
 
 function push() {
@@ -119,7 +122,11 @@ function push() {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
-  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" $USER_RULES . $REMOTE/ | sed "s/^/  | /" || die "PUSH"
+  # Do not push back remotely deleted files
+  cat "$TMP_DIR/remote-del" \
+  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+      --exclude-from - $USER_RULES . $REMOTE/ \
+  | sed "s/^/  | /" || die "PUSH"
 }
 
 # Do the actual synchronization
@@ -145,23 +152,29 @@ function sync {
   echo "# Saving current state and backing up files (if needed)"
   echo "  | Root dir: $(pwd)"
 
+  # Collect the current snapshot of the remote tree
+  if [[ -s "$STATE_DIR/tree-prev" ]]; then
+    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ | grep "^-\|^d" \
+      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$STATE_DIR/remote-tree-current" &
+    local remote_tree_pid=$!
+  fi
+
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
       | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$STATE_DIR/tree-current"
 
-  # Collect the current snapshot of the remote tree
-  rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ | grep "^-\|^d" \
-      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$STATE_DIR/remote-tree-current" &
-  local remote_tree_pid=$!
-
   # Prevent bringing back locally deleted files
   cp -f "$STATE_DIR/added-prev" "$TMP_DIR/fetch-exclude"
-  comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | sed -e "s:^[^/]*::" >> "$TMP_DIR/fetch-exclude"
+  if [[ -s "$STATE_DIR/tree-prev" ]]; then
+    comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | sed -e "s:^[^/]*::" >> "$TMP_DIR/local-add-del"
+  fi
 
   # Prevent deleting local files which were not deleted remotely
   # ie. Prevent deleting newly added local files
-  wait $remote_tree_pid
-  comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" >> "$TMP_DIR/fetch-exclude"
+  if [[ -s "$STATE_DIR/tree-prev" ]]; then
+    wait $remote_tree_pid
+    comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" > "$TMP_DIR/remote-del"
+  fi
 
   # It is difficult to only create the backup directory if needed; instead
   # we always create it, but remove it if it is empty afterwards.
@@ -170,15 +183,16 @@ function sync {
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
-  rsync --dry-run \
-        -auzxi --delete --exclude "/$DOT_DIR" --exclude-from "$TMP_DIR/fetch-exclude" \
+  cat "$STATE_DIR/added-prev" "$TMP_DIR/local-add-del" \
+  | rsync --dry-run \
+        -auzxi --delete --exclude "/$DOT_DIR" --exclude-from - \
         $USER_RULES $REMOTE/ . \
   | while read line; do
-    if [[ "$line" =~ ^[ch\<\>]f(cs|.s|c.)|^\*deleting ]]; then
+    if [[ "$line" =~ ^[ch\<\>]f|^\*deleting ]]; then
       filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
-      if [ -f "$filename" ]; then
-        echo "  | $filename"
-        cp --parents "$filename" "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
+      if [[ -f "$filename" ]]; then
+        echo "  \`- $filename"
+        cp --parents -p "$filename" "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
       fi
     fi
   done
@@ -196,7 +210,7 @@ function sync {
   echo
   echo "# Saving after-sync state and cleaning up"
   rsync -av --list-only --exclude "/$DOT_DIR" $USER_RULES . | grep "^-\|^d" \
-      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort > "$TMP_DIR/tree-after"
+      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" | sort > "$TMP_DIR/tree-after"
 
   # Save all newly created files for next run (to prevent deletion of them)
   # This includes files created by user in parallel to sync and files fetched from remote

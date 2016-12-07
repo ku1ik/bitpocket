@@ -205,16 +205,22 @@ function sync {
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | sed -e "s:^[^/]*::" > "$TMP_DIR/local-add-del"
+  else
+    # In the case of a new sync, where no previous tree snapshot is available,
+    # assume all the files on the local side should be protected
+    cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add-del"
   fi
 
   # Prevent deleting local files which were not deleted remotely
   # ie. Prevent deleting newly added local files
+  touch "$TMP_DIR/remote-del"
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     wait $remote_tree_pid
     comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" > "$TMP_DIR/remote-del"
   fi
 
-  pull && push
+  pull
+  push
 
   # Save after-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes

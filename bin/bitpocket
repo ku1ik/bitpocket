@@ -19,6 +19,7 @@ SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
 REMOTE_BACKUPS=false
+BACKUPS=true
 
 # Default command-line options and such
 COMMANDS=()
@@ -118,6 +119,8 @@ REMOTE_HOST=$REMOTE_HOST
 REMOTE_PATH="$REMOTE_PATH"
 
 ## Backups -----------------------------------
+## Enable file revisioning locally in the pull phase (>false< to disable)
+BACKUPS=true
 ## Make revisions of files on the REMOTE_HOST in the push phase.
 REMOTE_BACKUPS=false
 
@@ -155,10 +158,15 @@ function pull() {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pulling changes from server"
-  echo "# >> Saving current state and backing up files (if needed)"
 
   local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
-  local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+  local DO_BACKUP=""
+
+  if [[ $REMOTE_BACKUPS == true ]]
+  then
+      echo "# >> Saving current state and backing up files (if needed)"
+      local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+  fi
 
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
 

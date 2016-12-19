@@ -128,7 +128,7 @@ function pull() {
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
         $USER_RULES $REMOTE/ . \
   | while read line; do
-    if [[ "$line" =~ ^[ch\<\>]f|^\*deleting ]]; then
+    if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}
       filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
       if [[ -f "$filename" ]]; then

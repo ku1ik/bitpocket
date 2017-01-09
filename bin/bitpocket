@@ -245,7 +245,7 @@ function sync {
   # and added via the pull()
   sort "$TMP_DIR/tree-after" \
   | comm -13 "$TMP_DIR/pull-delete" - \
-  | sed -e "s:^\s*::" \
+  | sed -e "s:^\s*::" -e "s:/\$::" \
   > "$STATE_DIR/tree-prev"
 
   rm "$TMP_DIR/tree-after"

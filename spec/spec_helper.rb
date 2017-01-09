@@ -35,6 +35,10 @@ def rm(path)
   FileUtils.rm(path)
 end
 
+def mv(a, b)
+  FileUtils.mv(a, b)
+end
+
 RSpec::Matchers.define :exist do
   match do |filename|
     File.exist?(filename)

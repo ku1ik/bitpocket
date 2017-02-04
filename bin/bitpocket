@@ -17,7 +17,7 @@ LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash 
 # Default settings
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
-RSYNC_RSH="ssh"
+RSYNC_RSH="ssh -q"
 
 # Load config file
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
@@ -172,6 +172,40 @@ function push() {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
+
+  touch "$TMP_DIR/push-delete"
+
+  # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
+  # for logging of deleted files, which need to be sorted
+  exec 3>&1
+  exec 4> >(sort > "$TMP_DIR/push-delete")
+
+  cat "$TMP_DIR/remote-del" \
+      | rsync --dry-run -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+      --exclude-from - $USER_RULES . $REMOTE/ \
+      | while read line; do
+      if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
+          operation=${line%% *}
+          filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+          if [[ ! "$operation" =~ \+\+\+\+$ ]]; then
+      # $REMOTE_RUNNER "cd $REMOTE_PATH ; if [ -f \"$filename\" ]; then cp --parents -p --reflink=auto \"$filename\" $DOT_DIR/backups/$TIMESTAMP; fi" < /dev/null
+              echo "  B $filename" >&3
+              echo "$filename" >&4
+          fi
+      fi
+  done
+  # Close extra file descriptors
+  exec 4>&-
+  exec 3>&-
+  if [ -s "$TMP_DIR/push-delete" ]; then
+      echo "$(<$TMP_DIR/push-delete) has been backup to $DOT_DIR/backups/$TIMESTAMP at remote"
+      # Plato Wu,2017/02/04: copy -C change the default path
+      tar -cf - "$TMP_DIR/push-delete" | $REMOTE_RUNNER tar -C $REMOTE_PATH -xvf -
+      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $DOT_DIR/backups/$TIMESTAMP ; xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$DOT_DIR/backups/$TIMESTAMP"
+      # Plato Wu,2017/01/08: $() only works at local site
+      # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $DOT_DIR/backups/$TIMESTAMP  -maxdepth 0 -empty -exec rmdir $DOT_DIR/backups/$TIMESTAMP \;"
+  fi
+
   # Do not push back remotely deleted files
   cat "$TMP_DIR/remote-del" \
   | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \

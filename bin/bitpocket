@@ -33,7 +33,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Decide on runner (ssh / bash -c)
-if [ -n "$REMOTE_HOST" ]; then
+if [ "$REMOTE_HOST" != "localhost" ]; then
   REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
   REMOTE="$REMOTE_HOST:$REMOTE_PATH"
 else
@@ -66,17 +66,19 @@ TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 export RSYNC_RSH
 
 function init {
-  if [[ -d "$DOT_DIR" || -f "$CFG_FILE" ]]; then
+  if [[ $# -lt 2 ]]; then
+    echo "usage: bitpocket init {<REMOTE_HOST>|localhost} <REMOTE_PATH> [overwrite]"
+    exit 128
+  fi
+  # Plato Wu,2017/02/04: [/] start/end test condition; || need additional [], but -o don't
+  if [ "$3" != "overwrite" ] && [ -d "$DOT_DIR" -o -f "$CFG_FILE" ];  then
     echo "fatal: Current directory already initialized for bitpocket"
     exit 128
   fi
 
-  if [[ $# != 2 ]]; then
-    echo "usage: bitpocket init <REMOTE_HOST> <REMOTE_PATH>"
-    exit 128
+  if [ "$3" != "overwrite" ]; then
+      mkdir "$DOT_DIR"
   fi
-
-  mkdir "$DOT_DIR"
 
   cat <<EOF > "$CFG_FILE"
 ## Host and path of central storage
@@ -197,10 +199,11 @@ function push() {
   # Close extra file descriptors
   exec 4>&-
   exec 3>&-
+
   if [ -s "$TMP_DIR/push-delete" ]; then
       echo "$(<$TMP_DIR/push-delete) has been backup to $DOT_DIR/backups/$TIMESTAMP at remote"
       # Plato Wu,2017/02/04: copy -C change the default path
-      tar -cf - "$TMP_DIR/push-delete" | $REMOTE_RUNNER tar -C $REMOTE_PATH -xvf -
+      tar -cf - "$TMP_DIR/push-delete" | $REMOTE_RUNNER "tar -C $REMOTE_PATH -xvf -"
       $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $DOT_DIR/backups/$TIMESTAMP ; xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$DOT_DIR/backups/$TIMESTAMP"
       # Plato Wu,2017/01/08: $() only works at local site
       # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $DOT_DIR/backups/$TIMESTAMP  -maxdepth 0 -empty -exec rmdir $DOT_DIR/backups/$TIMESTAMP \;"
@@ -455,7 +458,7 @@ function list {
 }
 
 function usage {
-  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init <REMOTE_HOST> <REMOTE_PATH>]"
+  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init {<REMOTE_HOST>|localhost} <REMOTE_PATH>]"
   echo ""
   echo "Available commands:"
   echo "   sync    Run the sync process. If no command is specified, sync is run by default."

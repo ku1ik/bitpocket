@@ -33,7 +33,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Decide on runner (ssh / bash -c)
-if [ "$REMOTE_HOST" != "localhost" ]; then
+if [ -n "$REMOTE_HOST" -a "$REMOTE_HOST" != "localhost" ]; then
   REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
   REMOTE="$REMOTE_HOST:$REMOTE_PATH"
 else
@@ -67,7 +67,7 @@ export RSYNC_RSH
 
 function init {
   if [[ $# -lt 2 ]]; then
-    echo "usage: bitpocket init {<REMOTE_HOST>|localhost} <REMOTE_PATH> [overwrite]"
+    echo "usage: bitpocket init <{REMOTE_HOST | localhost}> <REMOTE_PATH> [overwrite]"
     exit 128
   fi
   # Plato Wu,2017/02/04: [/] start/end test condition; || need additional [], but -o don't
@@ -458,7 +458,7 @@ function list {
 }
 
 function usage {
-  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init {<REMOTE_HOST>|localhost} <REMOTE_PATH>]"
+  echo "usage:  bitpocket [sync|help|pack|log|cron|list|init <{REMOTE_HOST | localhost}> <REMOTE_PATH> [overwrite]]"
   echo ""
   echo "Available commands:"
   echo "   sync    Run the sync process. If no command is specified, sync is run by default."

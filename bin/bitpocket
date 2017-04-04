@@ -128,9 +128,9 @@ function pull() {
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
         $USER_RULES $REMOTE/ . \
   | while read line; do
+    filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}
-      filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
       if [[ -f "$filename" ]]; then
         [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
           || mkdir -p "$DOT_DIR"/backups/$TIMESTAMP
@@ -144,15 +144,14 @@ function pull() {
         echo "  | *deleting   $filename" >&3
         echo "/$filename" >&4
         [[ -d "$filename" ]] && rmdir "$filename" || rm "$filename"
-      else
-        # Sync the file. Use a NULL byte delimiter
-        printf '%s\0' "$filename"
-        if [[ "$operation" =~ \+\+\+\+$ ]]; then
-          # Mark as added locally
-          echo "/$filename" >> "$TMP_DIR/tree-after"
-        fi
+        continue
+      elif [[ "$operation" =~ \+\+\+\+$ ]]; then
+        # Mark as added locally
+        echo "/$filename" >> "$TMP_DIR/tree-after"
       fi
     fi
+    # Sync the file. Use a NULL byte delimiter
+    printf '%s\0' "$filename"
   done \
   | rsync --files-from=- --from0 -auzxi $RSYNC_OPTS $USER_RULES \
         $REMOTE/ . \

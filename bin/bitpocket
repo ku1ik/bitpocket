@@ -18,6 +18,7 @@ LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash 
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
+REMOTE_BACKUPS=false
 
 # Default command-line options and such
 COMMANDS=()
@@ -68,6 +69,13 @@ USER_RULES="$user_filter $user_include $user_exclude"
 
 TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 
+GREEN=""
+RED=""
+if [[ -t 1 ]]; then
+    GREEN="\x1b\x5b1;32m"
+    RED="\x1b\x5b1;31m"
+fi
+
 export RSYNC_RSH
 
 function init {
@@ -93,6 +101,10 @@ function init {
 ## Host and path of central storage
 REMOTE_HOST=$REMOTE_HOST
 REMOTE_PATH="$REMOTE_PATH"
+
+## Backups -----------------------------------
+## Make revisions of files on the REMOTE_HOST in the push phase.
+REMOTE_BACKUPS=false
 
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
@@ -123,79 +135,106 @@ function pull() {
   echo "# Pulling changes from server"
   echo "# >> Saving current state and backing up files (if needed)"
 
+  local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
+  local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
-  touch "$TMP_DIR/pull-delete"
 
   # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
   # for logging of deleted files, which need to be sorted
-  exec 3>&1
-  exec 4> >(sort > "$TMP_DIR/pull-delete")
+  exec 3> >(sort > "$TMP_DIR/pull-delete")
 
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
-  cat "$TMP_DIR/local-add-del" \
-  | rsync --dry-run \
-        -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
+  rsync -auzxi --delete-delay --exclude "/$DOT_DIR" \
+        --exclude-from="$TMP_DIR/local-add-del" \
+        $DO_BACKUP \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
-  | while read line; do
-    filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
-    if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
-      operation=${line%% *}
-      if [[ -f "$filename" ]]; then
-        [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
-          || mkdir -p "$DOT_DIR"/backups/$TIMESTAMP
-        cp --parents -p --reflink=auto "$filename" \
-          "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
-        echo "  B $filename" >&3
-      fi
-      # rsync does not support DELETE via --files-from, so delete inline here
-      # after the backup was made
-      if [[ "$operation" == "*deleting" ]]; then
-        # Only delete locally if deleted remotely
-        if grep -q -x "/$filename" "$TMP_DIR/remote-del"; then
-          echo "  | *deleting   $filename" >&3
-          echo "/$filename" >&4
-          [[ -d "$filename" ]] && rmdir "$filename" || rm "$filename"
-        fi
-        continue
-      elif [[ "$operation" =~ \+\+\+\+$ ]]; then
-        # Mark as added locally
-        echo "/$filename" >> "$TMP_DIR/tree-after"
-      fi
-    fi
-    # Drop trailing slash from folders so the contents are not recursively
-    # pulled
-    if [[ -d "$filename" && ${filename: -1} == '/' ]]; then
-      filename="${filename:0:-1}"
-    fi
-    # Sync the file. Use a NULL byte delimiter
-    printf '%s\0' "$filename"
-  done \
-  | rsync --files-from=- --from0 -auzxi $RSYNC_OPTS $USER_RULES \
-        $REMOTE/ . \
+  | detect_changes \
   | sed "s/^/  | /" || die "PULL"
 
-  # Close extra file descriptors
-  exec 4>&-
-  exec 3>&-
+  if [[ -d "$BACKUP_TARGET" ]]
+  then
+      if [[ -n $(find "$BACKUP_TARGET" -type f) ]]
+      then
+          echo "  | Some files were backed up to $BACKUP_TARGET"
+      else
+          # Some versions of rsync will create the backup dir, even if it doesn't
+          # get populated with any backups
+          rmdir "$BACKUP_TARGET"
+      fi
+  fi
 
-  [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
-    && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+  exec 3>&-
+}
+
+function detect_changes() {
+    # Read file names from STDIN, and, if they exist locally, create a backup
+    # of each of the files. If they are requested to be deleted (indicated by
+    # the tag at the line beginning), then they are deleted here. Write the
+    # filenames to STDOUT which need to be synchronized by `rsync`
+    while read line
+    do
+        filename="${line#* }"
+        filename="${filename//\`/\\\`}"
+        operation=${line%% *}
+        if [[ "$operation" == "*deleting" ]]
+        then
+            # Only delete locally if deleted remotely
+            if grep -q -x "/$filename" "$TMP_DIR/remote-del"
+            then
+                # Delete here rather than syncing
+                echo "/$filename" >&3
+            fi
+        elif [[ "$operation" =~ \+\+\+\+$ ]]
+        then
+            # Mark as added locally
+            echo "/$filename" >> "$TMP_DIR/tree-after"
+        fi
+    done
 }
 
 function push() {
   # Actual push
+
   # Send new and updated, remotely remove files deleted locally
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
 
+  local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
+  local DO_BACKUP=""
+  if [[ $REMOTE_BACKUPS == true ]]
+  then
+      echo "# >> Saving current state and backing up files (if needed)"
+      DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+  fi
+
   # Do not push back remotely deleted files
-  cat "$TMP_DIR/remote-del" \
-  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
-      --exclude-from - $USER_RULES . $REMOTE/ \
+  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+      --exclude-from="$TMP_DIR/remote-del" \
+      $DO_BACKUP \
+      $USER_RULES . $REMOTE/ \
   | sed "s/^/  | /" || die "PUSH"
+
+  if [[ $REMOTE_BACKUPS == true ]]
+  then
+      $REMOTE_RUNNER "
+      cd '$REMOTE_PATH'
+      if [[ -d '$BACKUP_TARGET' ]]
+      then
+	  if [[ -n \$(find '$BACKUP_TARGET' -type f) ]]
+	  then
+	      echo '  | Some files were backed up to $BACKUP_TARGET'
+	  else
+	      # Some versions of rsync will create the backup dir, even if it doesn't
+	      # get populated with any backups
+	      rmdir '$BACKUP_TARGET'
+	  fi
+      fi
+      "
+  fi
 }
 
 function analyse {
@@ -251,7 +290,7 @@ function sync {
   acquire_remote_lock
 
   echo
-  echo -e "\x1b\x5b1;32mbitpocket started\x1b\x5b0m at `date`."
+  echo -e "${GREEN}bitpocket started\x1b\x5b0m at `date`."
   echo
 
   # Fire off slow sync start notifier in background
@@ -285,11 +324,10 @@ function sync {
 
   cleanup
   echo
-  echo -e "\x1b\x5b1;32mbitpocket finished\x1b\x5b0m at `date`."
+  echo -e "${GREEN}bitpocket finished\x1b\x5b0m at `date`."
   echo
 
 }
-
 
 # Pack backups into a git repository
 function pack {
@@ -384,7 +422,7 @@ function acquire_lock {
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
-      echo -e "\x1b\x5b1;31mbitpocket error:\x1b\x5b0m Bitpocket found a stale lock directory:"
+      echo -e "${RED}bitpocket error:\x1b\x5b0m Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
       echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
@@ -445,7 +483,7 @@ function die {
 
 # List all files in the sync set
 function list {
-  echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m will sync the following files:"
+  echo -e "${GREEN}bitpocket\x1b\x5b0m will sync the following files:"
   rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
       | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort
 }

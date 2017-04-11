@@ -200,11 +200,15 @@ function push() {
   exec 4>&-
   exec 3>&-
 
+  sleep 3
+
   if [ -s "$TMP_DIR/push-delete" ]; then
-      echo "$(<$TMP_DIR/push-delete) has been backup to $DOT_DIR/backups/$TIMESTAMP at remote"
       # Plato Wu,2017/02/04: copy -C change the default path
       tar -cf - "$TMP_DIR/push-delete" | $REMOTE_RUNNER "tar -C $REMOTE_PATH -xvf -"
-      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $DOT_DIR/backups/$TIMESTAMP ; xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$DOT_DIR/backups/$TIMESTAMP"
+      echo "$(<$TMP_DIR/push-delete) has been backup to remote $DOT_DIR/backups/$TIMESTAMP at remote"
+      # xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$DOT_DIR/backups/$TIMESTAMP
+      # cat $TMP_DIR/push-delete | xargs -I file cp -p --parents --reflink file $DOT_DIR/backups/$TIMESTAMP
+      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $DOT_DIR/backups/$TIMESTAMP ; cat $TMP_DIR/push-delete | while read file; do mkdir -p $DOT_DIR/backups/$TIMESTAMP/\`dirname \$file\`; cp \$file $DOT_DIR/backups/$TIMESTAMP/\`dirname \$file\`; done"
       # Plato Wu,2017/01/08: $() only works at local site
       # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $DOT_DIR/backups/$TIMESTAMP  -maxdepth 0 -empty -exec rmdir $DOT_DIR/backups/$TIMESTAMP \;"
   fi

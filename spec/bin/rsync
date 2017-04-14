@@ -7,5 +7,7 @@ if [[ $CALLBACK == 'add_after' && "${!#}" != "." ]]; then
 fi
 
 if [[ $CALLBACK == 'remove_after' && "${!#}" != "." ]]; then
-  rm after
+  # Plato Wu,2017/04/14: ignore error message for CALLBACK will
+  # take effect in many time rsync of one sync
+  rm -f after
 fi

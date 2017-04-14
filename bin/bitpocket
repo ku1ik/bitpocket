@@ -62,6 +62,7 @@ fi
 USER_RULES="$user_filter $user_include $user_exclude"
 
 TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
+BACKUP_DIR="$DOT_DIR"/backups/$TIMESTAMP
 
 export RSYNC_RSH
 
@@ -134,10 +135,10 @@ function pull() {
       operation=${line%% *}
       filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
       if [[ -f "$filename" ]]; then
-        [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
-          || mkdir -p "$DOT_DIR"/backups/$TIMESTAMP
-        cp --parents -p --reflink=auto "$filename" \
-          "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
+        [[ -d $BACKUP_DIR ]] \
+          || mkdir -p $BACKUP_DIR
+         mkdir -p $BACKUP_DIR/`dirname "$filename"`; cp -p "$filename" $BACKUP_DIR/`dirname "$filename"` \
+         || die "BACKUP"
         echo "  B $filename" >&3
       fi
       # rsync does not support DELETE via --files-from, so delete inline here
@@ -164,8 +165,8 @@ function pull() {
   exec 4>&-
   exec 3>&-
 
-  [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
-    && echo "  | Some files were backed up to $DOT_DIR/backups/$TIMESTAMP"
+  [[ -d $BACKUP_DIR ]] \
+    && echo "  | Some files were backed up to $BACKUP_DIR"
 }
 
 function push() {
@@ -190,7 +191,7 @@ function push() {
           operation=${line%% *}
           filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
           if [[ ! "$operation" =~ \+\+\+\+$ ]]; then
-      # $REMOTE_RUNNER "cd $REMOTE_PATH ; if [ -f \"$filename\" ]; then cp --parents -p --reflink=auto \"$filename\" $DOT_DIR/backups/$TIMESTAMP; fi" < /dev/null
+      # $REMOTE_RUNNER "cd $REMOTE_PATH ; if [ -f \"$filename\" ]; then cp --parents -p --reflink=auto \"$filename\" $BACKUP_DIR; fi" < /dev/null
               echo "  B $filename" >&3
               echo "$filename" >&4
           fi
@@ -205,12 +206,12 @@ function push() {
   if [ -s "$TMP_DIR/push-delete" ]; then
       # Plato Wu,2017/02/04: copy -C change the default path
       tar -cf - "$TMP_DIR/push-delete" | $REMOTE_RUNNER "tar -C $REMOTE_PATH -xvf -"
-      echo "$(<$TMP_DIR/push-delete) has been backup to remote $DOT_DIR/backups/$TIMESTAMP at remote"
-      # xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$DOT_DIR/backups/$TIMESTAMP
-      # cat $TMP_DIR/push-delete | xargs -I file cp -p --parents --reflink file $DOT_DIR/backups/$TIMESTAMP
-      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $DOT_DIR/backups/$TIMESTAMP ; cat $TMP_DIR/push-delete | while read file; do mkdir -p $DOT_DIR/backups/$TIMESTAMP/\`dirname \$file\`; cp \$file $DOT_DIR/backups/$TIMESTAMP/\`dirname \$file\`; done"
       # Plato Wu,2017/01/08: $() only works at local site
-      # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $DOT_DIR/backups/$TIMESTAMP  -maxdepth 0 -empty -exec rmdir $DOT_DIR/backups/$TIMESTAMP \;"
+      echo "$(<$TMP_DIR/push-delete) has been backup to remote $BACKUP_DIR at remote"
+      # xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$BACKUP_DIR
+      # cat $TMP_DIR/push-delete | xargs -I file cp -p --parents --reflink file $BACKUP_DIR
+      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $BACKUP_DIR ; cat $TMP_DIR/push-delete | while read file; do mkdir -p $BACKUP_DIR/\`dirname \"\$file\"\`; cp -p \"\$file\" $BACKUP_DIR/\`dirname \"\$file\"\`; done"
+      # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $BACKUP_DIR -maxdepth 0 -empty -exec rmdir $BACKUP_DIR \;"
   fi
 
   # Do not push back remotely deleted files

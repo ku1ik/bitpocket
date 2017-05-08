@@ -126,7 +126,7 @@ function pull() {
   cat "$TMP_DIR/local-add-del" \
   | rsync --dry-run \
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
-        $USER_RULES $REMOTE/ . \
+        $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | while read line; do
     filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then

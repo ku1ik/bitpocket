@@ -20,3 +20,7 @@ $ bundle exec rake
 Finished in 6.16 seconds
 19 examples, 0 failures
 The command "bundle exec rake" exited with 0.
+# Plato Wu,2017/05/03:
+if ppt is opened(windows), if will be delete and pull version from server(linux), but modify ppt is OK for sync
+@todo use --inplace to reduce transfer size
+@todo cp report cp: omitting directory” mean directory not copy need recursively?

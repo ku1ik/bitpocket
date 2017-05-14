@@ -89,8 +89,10 @@ REMOTE_PATH="$2"
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
-## Uncomment following line to follow symlinks (transform it into referent file/dir)
-# RSYNC_OPTS="-L"
+# comment following line to disable follow symlinks (transform it into referent file/dir)
+RSYNC_OPTS="-L"
+
+# Add --no-g --no-o to RSYNC_OPTS for skiping set owner and group to remote.
 
 ## Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10
@@ -129,7 +131,7 @@ function pull() {
   cat "$TMP_DIR/local-add-del" \
   | rsync --dry-run \
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
-        $USER_RULES $REMOTE/ . \
+        $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | while read line; do
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}
@@ -210,7 +212,7 @@ function push() {
       echo "$(<$TMP_DIR/push-delete) has been backup to remote $BACKUP_DIR at remote"
       # xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$BACKUP_DIR
       # cat $TMP_DIR/push-delete | xargs -I file cp -p --parents --reflink file $BACKUP_DIR
-      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $BACKUP_DIR ; cat $TMP_DIR/push-delete | while read file; do mkdir -p $BACKUP_DIR/\`dirname \"\$file\"\`; cp -p \"\$file\" $BACKUP_DIR/\`dirname \"\$file\"\`; done"
+      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $BACKUP_DIR ; cat $TMP_DIR/push-delete | while read file; do mkdir -p $BACKUP_DIR/\`dirname \"$file\"\`; cp -p \"\$file\" $BACKUP_DIR/\`dirname \"$file\"\`; done"
       # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $BACKUP_DIR -maxdepth 0 -empty -exec rmdir $BACKUP_DIR \;"
   fi
 
@@ -247,7 +249,7 @@ function sync {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+    rsync --list-only --recursive --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES $REMOTE/ \
       | grep "^-\|^d" \
       | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
       | sort > "$STATE_DIR/remote-tree-current" &
@@ -255,7 +257,7 @@ function sync {
   fi
 
   # Collect the current snapshot of the local tree
-  rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
+  rsync --list-only --recursive --exclude "/$DOT_DIR" $RSYNC_OPTS $USER_RULES . \
       | grep "^-\|^d" \
       | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
       | sort > "$STATE_DIR/tree-current" \
@@ -458,7 +460,7 @@ function die {
 # List all files in the sync set
 function list {
   echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m will sync the following files:"
-  rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
+  rsync -av --list-only --exclude "/$DOT_DIR"  $RSYNC_OPTS $USER_RULES . | grep "^-\|^d" \
       | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort
 }
 

@@ -205,7 +205,7 @@ function sync {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
-      | grep "^-\|^d" \
+      | grep "^[dl-]" \
       | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
       | sort > "$STATE_DIR/remote-tree-current" &
     local remote_tree_pid=$!
@@ -213,7 +213,7 @@ function sync {
 
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
-      | grep "^-\|^d" \
+      | grep "^[dl-]" \
       | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
       | sort > "$STATE_DIR/tree-current" \
       || die "SNAPSHOT"

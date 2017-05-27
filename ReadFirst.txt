@@ -1,4 +1,4 @@
-apt-cyg install ruby, rubygems, ruby-pkg-config(or cygwin32-libffi), libffi-devel
+apt-cyg install ruby, rubygems, ruby-pkg-config(or cygwin32-libffi), libffi-devel, ruby-devel gcc4(cygwin64 gcc-g++), make
 gem install bundler
 bundler install // create Gemfile.lock
 rvm use 1.9.3 --install --binary --fuzzy
@@ -14,13 +14,17 @@ Bundler version 1.7.6
 $ gem --version
 2.6.8
 $ bundle install --jobs=3 --retry=3 --deployment // deplyment need Gemfiles.lock
+# Error: Bundler::GemspecError: Could not read gem at
+# Solution rm -f  /home/plato.wu/bin/bitpocket/vendor/bundle/ruby/2.3.0/cache/ffi-1.9.18.gem; gem install ffi -v '1.9.18'
 $ bundle exec rake
 /home/travis/.rvm/rubies/ruby-1.9.3-p551/bin/ruby -S rspec ./spec/sync_spec.rb ./spec/excludes_spec.rb ./spec/locking_spec.rb --colour
 ...................
 Finished in 6.16 seconds
 19 examples, 0 failures
 The command "bundle exec rake" exited with 0.
+Error: bundle only supports platforms
+Solution: bundle install --no-deployment
 # Plato Wu,2017/05/03:
 if ppt is opened(windows), if will be delete and pull version from server(linux), but modify ppt is OK for sync
 @todo use --inplace to reduce transfer size
-@todo cp report cp: omitting directory” mean directory not copy need recursively?
+@todo fix shadow copy like outlook file

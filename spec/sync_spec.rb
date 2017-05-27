@@ -6,16 +6,16 @@ describe 'bitpocket sync' do
   it 'transfers new file from local to remote' do
     touch local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should exist
-    remote_path('a').should exist
+    expect(exist(local_path('a')))
+    expect(exist(remote_path('a')))
   end
 
   it 'transfers updated file from local to remote' do
     touch local_path('a')
     touch remote_path('a')
-    sync.should succeed
+    expect(succeed(sync))
 
     if RUBY_PLATFORM =~ /darwin/
       system "touch -mt 200801120000 #{remote_path('a')}"
@@ -25,62 +25,62 @@ describe 'bitpocket sync' do
 
     cat content, local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    File.read(local_path('a')).should == content
-    File.read(remote_path('a')).should == content
+    expect(File.read(local_path('a')) == content)
+    expect(File.read(remote_path('a')) == content)
   end
 
   it 'transfers new file from remote to local' do
     touch remote_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should exist
-    remote_path('a').should exist
+    expect(exist(local_path('a')))
+    expect(exist(remote_path('a')))
   end
 
   it 'transfers updated file from remote to local' do
     touch local_path('a')
     touch remote_path('a')
-    sync.should succeed
+    expect(succeed(sync))
     cat content, remote_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    File.read(local_path('a')).should == content
-    File.read(remote_path('a')).should == content
+    expect(File.read(local_path('a')) == content)
+    expect(File.read(remote_path('a')) == content)
   end
 
   it 'removes file from remote if locally deleted' do
     touch local_path('a')
     touch remote_path('a')
-    sync.should succeed
+    expect(succeed(sync))
     rm local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should_not exist
-    remote_path('a').should_not exist
+    expect(not(exist(local_path('a'))))
+    expect(not(exist(remote_path('a'))))
   end
 
   it 'removes file from local if remotely deleted' do
     touch local_path('a')
     touch remote_path('a')
-    sync.should succeed
+    expect(succeed(sync))
     rm remote_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should_not exist
-    remote_path('a').should_not exist
+    expect(not(exist(local_path('a'))))
+    expect(not(exist(remote_path('a'))))
   end
 
   it 'handles remote deletes between syncs' do
     touch remote_path('a/c')
     touch remote_path('a/f')
 
-    sync.should succeed
+    expect(succeed(sync))
 
     # After the sync, 'c' and 'f' are in 'added-prev', so they are excluded
     # from the next pull
@@ -89,13 +89,13 @@ describe 'bitpocket sync' do
     mkdir remote_path('a/b')
     mv remote_path('a/f'), remote_path('a/b/f')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a/c').should_not exist
-    local_path('a/f').should_not exist
-    local_path('a/b/f').should exist
+    expect(not(exist(local_path('a/c'))))
+    expect(not(exist(local_path('a/f'))))
+    expect(exist(local_path('a/b/f')))
 
-    remote_path('a/c').should_not exist
-    remote_path('a/f').should_not exist
+    expect(not(exist(remote_path('a/c'))))
+    expect(not(exist(remote_path('a/f'))))
   end
 end

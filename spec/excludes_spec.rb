@@ -6,47 +6,47 @@ describe 'bitpocket excludes' do
   it 'does not remove new local files' do
     touch local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should exist
+    expect(exist(local_path('a')))
   end
 
   it 'does not remove new local files created in parallel to previous sync' do
-    sync(:callback => :add_after).should succeed
-    sync.should succeed
+    expect(succeed(sync(:callback => :add_after)))
+    expect(succeed(sync))
 
-    local_path('after').should exist
+    expect(exist(local_path('after')))
   end
 
   it 'does not bring back removed local files that were previously created locally' do
     touch local_path('a')
     touch remote_path('a')
-    sync.should succeed
+    expect(succeed(sync))
     rm local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should_not exist
+    expect(not(exist(local_path('a'))))
   end
 
   it 'does not bring back removed local files that came from remote in prev sync' do
     touch remote_path('a')
-    sync.should succeed
-    local_path('a').should exist
+    expect(succeed(sync))
+    expect(exist(local_path('a')))
     rm local_path('a')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should_not exist
+    expect(not(exist(local_path('a'))))
   end
 
   it 'does not bring back removed local files deleted in parallel to previous sync' do
     touch local_path('after')
-    sync.should succeed
-    sync(:callback => :remove_after).should succeed
-    sync.should succeed
+    expect(succeed(sync))
+    expect(succeed(sync(:callback => :remove_after)))
+    expect(succeed(sync))
 
-    local_path('after').should_not exist
+    expect(not(exist(local_path('after'))))
   end
 
   it 'does not sync ignored files' do
@@ -54,19 +54,19 @@ describe 'bitpocket excludes' do
     touch local_path('a')
     touch remote_path('b')
 
-    sync.should succeed
+    expect(succeed(sync))
 
-    local_path('a').should exist
-    remote_path('a').should_not exist
-    local_path('b').should_not exist
-    remote_path('b').should exist
+    expect(exist(local_path('a')))
+    expect(not(exist(remote_path('a'))))
+    expect(not(exist(local_path('b'))))
+    expect(exist(remote_path('b')))
   end
 
   it 'does not sync .bitpocket dir' do
-    sync.should succeed
+    expect(succeed(sync))
 
     %w(config state).each do |f|
-      remote_path(".bitpocket/#{f}").should_not exist
+      expect(not(exist(remote_path(".bitpocket/#{f}"))))
     end
   end
 end

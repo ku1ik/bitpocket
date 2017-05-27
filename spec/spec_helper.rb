@@ -5,7 +5,9 @@ RSYNC_STUB_BIN_PATH = File.join(File.dirname(__FILE__), 'bin')
 PATH = "#{RSYNC_STUB_BIN_PATH}:#{ENV['PATH']}"
 
 def sync(opts={})
-  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{PATH} bash #{BP_BIN_PATH}' >/dev/null"
+  # Plato Wu,2017/05/27: cygwin path contain spaces, it is ng
+  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{RSYNC_STUB_BIN_PATH}:$PATH bash #{BP_BIN_PATH}' >/dev/null"
+#  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{PATH} bash #{BP_BIN_PATH}' >/dev/null"
   $?.exitstatus
 end
 

@@ -6,31 +6,31 @@ describe 'bitpocket locking' do
   it 'exits with status 1 when other instance is running' do
     cat $$, local_path('.bitpocket/tmp/lock/pid')
 
-    expect(sync).to be 1
+    expect(sync).to exit_with(1)
   end
 
   it 'exits with status 2 when stale lock found' do
     cat max_pid, local_path('.bitpocket/tmp/lock/pid')
 
-    expect(sync).to be 2
+    expect(sync).to exit_with(2)
   end
 
   it 'exits with status 3 when can\'t acquire remote lock' do
     mkdir remote_path('.bitpocket/tmp/lock')
 
-    expect(sync).to be 3
+    expect(sync).to exit_with(3)
   end
 
   it 'should release local lock after successful sync' do
-    expect(succeed(sync))
+    expect(sync).to succeed
 
-    expect(not(exist(local_path('.bitpocket/tmp/lock'))))
+    expect(local_path('.bitpocket/tmp/lock')).not_to exist
   end
 
   it 'should release remote lock after successful sync' do
-    expect(succeed(sync))
+    expect(sync).to succeed
 
-    expect(not(exist(remote_path('.bitpocket/tmp/lock'))))
+    expect(remote_path('.bitpocket/tmp/lock')).not_to exist
   end
 
   def max_pid

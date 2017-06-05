@@ -17,6 +17,7 @@ $ bundle install --jobs=3 --retry=3 --deployment // deplyment need Gemfiles.lock
 # Error: Bundler::GemspecError: Could not read gem at
 # Solution rm -f  /home/plato.wu/bin/bitpocket/vendor/bundle/ruby/2.3.0/cache/ffi-1.9.18.gem; gem install ffi -v '1.9.18'
 $ bundle exec rake
+# ~/bin/bundle exec rspec spec/sync_spec.rb  is ok for run only one file
 /home/travis/.rvm/rubies/ruby-1.9.3-p551/bin/ruby -S rspec ./spec/sync_spec.rb ./spec/excludes_spec.rb ./spec/locking_spec.rb --colour
 ...................
 Finished in 6.16 seconds
@@ -28,3 +29,6 @@ Solution: bundle install --no-deployment
 if ppt is opened(windows), if will be delete and pull version from server(linux), but modify ppt is OK for sync
 @todo use --inplace to reduce transfer size
 @todo fix shadow copy like outlook file
+@todo test directory not exist
+foo should => expect(xxx).to
+foo should not => expect(xxx).not_to

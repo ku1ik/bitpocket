@@ -125,10 +125,11 @@ function pull() {
   # for logging of deleted files, which need to be sorted
   exec 3>&1
   exec 4> >(sort > "$TMP_DIR/pull-delete")
-
+  
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
+  #mkdir -p $BACKUP_DIR/`dirname "$filename"`; cp -p "$filename" $BACKUP_DIR/`dirname "$filename"` \
   cat "$TMP_DIR/local-add-del" \
   | rsync --dry-run \
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
@@ -140,7 +141,7 @@ function pull() {
       if [[ -f "$filename" ]]; then
         [[ -d $BACKUP_DIR ]] \
           || mkdir -p $BACKUP_DIR
-         mkdir -p $BACKUP_DIR/`dirname "$filename"`; cp -p "$filename" $BACKUP_DIR/`dirname "$filename"` \
+         mkdir -p "$BACKUP_DIR/`dirname "$filename"`"; cp -p "$filename" "$BACKUP_DIR/`dirname "$filename"`" \
          || die "BACKUP"
         echo "  B $filename" >&3
       fi
@@ -212,7 +213,7 @@ function push() {
       echo "$(<$TMP_DIR/push-delete) has been backup to remote $BACKUP_DIR at remote"
       # xargs --arg-file=$TMP_DIR/push-delete cp --parents -p --reflink=auto  --target-directory=$BACKUP_DIR
       # cat $TMP_DIR/push-delete | xargs -I file cp -p --parents --reflink file $BACKUP_DIR
-      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $BACKUP_DIR ; cat $TMP_DIR/push-delete | while read file; do if [[ -f \"\$file\" ]]; then mkdir -p $BACKUP_DIR/\`dirname \"\$file\"\`; cp -p \"\$file\" $BACKUP_DIR/\`dirname \"\$file\"\`; fi done"
+      $REMOTE_RUNNER "cd $REMOTE_PATH ; mkdir -p $BACKUP_DIR ; cat $TMP_DIR/push-delete | while read file; do if [[ -f \"\$file\" ]]; then mkdir -p \"$BACKUP_DIR/\`dirname \"\$file\"\`\"; cp -p \"\$file\" \"$BACKUP_DIR/\`dirname \"\$file\"\`\"; fi done"
       # $REMOTE_RUNNER  "cd $REMOTE_PATH ; find $BACKUP_DIR -maxdepth 0 -empty -exec rmdir $BACKUP_DIR \;"
   fi
 

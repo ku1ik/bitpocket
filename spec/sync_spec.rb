@@ -66,6 +66,7 @@ describe 'bitpocket sync' do
 
   it 'removes file from local if remotely deleted' do
     touch local_path('a')
+    touch local_path('b')
     touch remote_path('a')
     expect(sync).to succeed
     rm remote_path('a')
@@ -111,13 +112,21 @@ describe 'bitpocket sync' do
   end
 
   it 'handles local backup ' do
-    # Plato Wu,2017/05/31: need handle path which contain spaces
     touch local_path('a')
     touch local_path('a b/c d')
     expect(sync).to succeed
     rm remote_path('a b/c d')
     expect(sync).to succeed
     expect(Dir.glob(local_path(".bitpocket/backups/*/a b/c d")).empty?).to be false
+  end
+
+  it 'exists with status 128 when remote path disappear ' do
+    touch local_path('a')
+    remove_dir @remote_dir
+    # Plato Wu,2017/06/06: fisrt time is OK.
+    expect(sync).to succeed
+    remove_dir @remote_dir
+    expect(sync).to exit_with(128)
   end
 
 end

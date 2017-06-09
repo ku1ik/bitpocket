@@ -29,6 +29,7 @@ Solution: bundle install --no-deployment
 if ppt is opened(windows), if will be delete and pull version from server(linux), but modify ppt is OK for sync
 @todo use --inplace to reduce transfer size
 @todo fix shadow copy like outlook file
-@todo test directory not exist
+@todo https://github.com/sickill/bitpocket/commit/33b61a8
 foo should => expect(xxx).to
 foo should not => expect(xxx).not_to
+cp: failed to preserve ownership for

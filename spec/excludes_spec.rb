@@ -41,6 +41,7 @@ describe 'bitpocket excludes' do
   end
 
   it 'does not bring back removed local files deleted in parallel to previous sync' do
+    touch local_path('a')
     touch local_path('after')
     expect(sync).to succeed
     expect(succeed(sync(:callback => :remove_after)))

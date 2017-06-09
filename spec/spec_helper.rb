@@ -33,6 +33,10 @@ def mkdir(path)
   FileUtils.mkdir_p(path)
 end
 
+def remove_dir(path)
+  FileUtils.remove_dir(path)
+end
+
 def rm(path)
   FileUtils.rm(path)
 end

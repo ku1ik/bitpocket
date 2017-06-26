@@ -70,4 +70,38 @@ describe 'bitpocket excludes' do
       expect(remote_path(".bitpocket/#{f}")).not_to exist
     end
   end
+
+  it 'does not remove new local files which contain []`' do
+    touch remote_path('a')
+
+    touch local_path('[]`')
+
+    expect(sync).to succeed
+
+    expect(local_path('[]`')).to exist
+
+    rm local_path('[]`')
+
+    expect(sync).to succeed
+
+    expect(local_path('[]`')).not_to exist
+
+    expect(Dir.glob(remote_path('.bitpocket/backups/*/\[\]\`')).empty?).to be false
+
+    touch remote_path('[]`')
+
+    expect(sync).to succeed
+
+    expect(remote_path('[]`')).to exist
+
+    rm remote_path('[]`')
+
+    expect(sync).to succeed
+
+    expect(remote_path('[]`')).not_to exist
+
+    expect(Dir.glob(local_path('.bitpocket/backups/*/\[\]\`')).empty?).to be false
+
+  end
+
 end

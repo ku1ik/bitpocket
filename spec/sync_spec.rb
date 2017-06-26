@@ -102,13 +102,12 @@ describe 'bitpocket sync' do
 
   it 'handles remote backup ' do
     # Plato Wu,2017/05/31: need handle path which contain spaces
-    # Plato Wu,2017/05/31: need handle path which contain spaces
     touch local_path('a')
     touch local_path('a b/c d')
     expect(sync).to succeed
     rm local_path('a b/c d')
     expect(sync).to succeed
-    expect(Dir.glob(remote_path(".bitpocket/backups/*/a b/c d")).empty?).to be false
+    expect(Dir.glob(remote_path('.bitpocket/backups/*/a b/c d')).empty?).to be false
   end
 
   it 'handles local backup ' do
@@ -117,7 +116,7 @@ describe 'bitpocket sync' do
     expect(sync).to succeed
     rm remote_path('a b/c d')
     expect(sync).to succeed
-    expect(Dir.glob(local_path(".bitpocket/backups/*/a b/c d")).empty?).to be false
+    expect(Dir.glob(local_path('.bitpocket/backups/*/a b/c d')).empty?).to be false
   end
 
   it 'exists with status 128 when remote path disappear ' do

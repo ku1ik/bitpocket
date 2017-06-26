@@ -129,15 +129,15 @@ function pull() {
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
-  #mkdir -p $BACKUP_DIR/`dirname "$filename"`; cp -p "$filename" $BACKUP_DIR/`dirname "$filename"` \
-  cat "$TMP_DIR/local-add-del" \
+  cat "$TMP_DIR/local-add-del" | sed -e "s/\[/\\\\[/g" \
   | rsync --dry-run \
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | while read line; do
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}
-      filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+#      filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+      filename=$(sed "s:^\S*\s*::" <<< "$line")
       if [[ -f "$filename" ]]; then
         [[ -d $BACKUP_DIR ]] \
           || mkdir -p $BACKUP_DIR
@@ -187,13 +187,14 @@ function push() {
   exec 3>&1
   exec 4> >(sort > "$TMP_DIR/push-delete")
 
-  cat "$TMP_DIR/remote-del" \
+  cat "$TMP_DIR/remote-del" | sed -e "s/\[/\\\\[/g" \
       | rsync --dry-run -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
       --exclude-from - $USER_RULES . $REMOTE/ \
       | while read line; do
       if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
           operation=${line%% *}
-          filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+#          filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
+          filename=$(sed "s:^\S*\s*::" <<< "$line")
           if [[ ! "$operation" =~ \+\+\+\+$ ]]; then
               echo "  B $filename" >&3
               echo "$filename" >&4
@@ -218,7 +219,7 @@ function push() {
   fi
 
   # Do not push back remotely deleted files
-  cat "$TMP_DIR/remote-del" \
+  cat "$TMP_DIR/remote-del" | sed -e "s/\[/\\\\[/g" \
   | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
       --exclude-from - $USER_RULES . $REMOTE/ \
   | sed "s/^/  | /" || die "PUSH"

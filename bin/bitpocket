@@ -150,6 +150,11 @@ function pull() {
         echo "/$filename" >> "$TMP_DIR/tree-after"
       fi
     fi
+    # Drop trailing slash from folders so the contents are not recursively
+    # pulled
+    if [[ -d "$filename" && ${filename: -1} == '/' ]]; then
+      filename="${filename:0:-1}"
+    fi
     # Sync the file. Use a NULL byte delimiter
     printf '%s\0' "$filename"
   done \

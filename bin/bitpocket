@@ -141,9 +141,12 @@ function pull() {
       # rsync does not support DELETE via --files-from, so delete inline here
       # after the backup was made
       if [[ "$operation" == "*deleting" ]]; then
-        echo "  | *deleting   $filename" >&3
-        echo "/$filename" >&4
-        [[ -d "$filename" ]] && rmdir "$filename" || rm "$filename"
+        # Only delete locally if deleted remotely
+        if grep -q -x "/$filename" "$TMP_DIR/remote-del"; then
+          echo "  | *deleting   $filename" >&3
+          echo "/$filename" >&4
+          [[ -d "$filename" ]] && rmdir "$filename" || rm "$filename"
+        fi
         continue
       elif [[ "$operation" =~ \+\+\+\+$ ]]; then
         # Mark as added locally
@@ -176,6 +179,7 @@ function push() {
   # Order of includes/excludes/filters is EXTREMELY important
   echo
   echo "# Pushing changes to server"
+
   # Do not push back remotely deleted files
   cat "$TMP_DIR/remote-del" \
   | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \

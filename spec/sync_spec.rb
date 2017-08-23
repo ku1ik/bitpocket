@@ -75,4 +75,27 @@ describe 'bitpocket sync' do
     local_path('a').should_not exist
     remote_path('a').should_not exist
   end
+
+  it 'handles remote deletes between syncs' do
+    touch remote_path('a/c')
+    touch remote_path('a/f')
+
+    sync.should succeed
+
+    # After the sync, 'c' and 'f' are in 'added-prev', so they are excluded
+    # from the next pull
+
+    rm remote_path('a/c')
+    mkdir remote_path('a/b')
+    mv remote_path('a/f'), remote_path('a/b/f')
+
+    sync.should succeed
+
+    local_path('a/c').should_not exist
+    local_path('a/f').should_not exist
+    local_path('a/b/f').should exist
+
+    remote_path('a/c').should_not exist
+    remote_path('a/f').should_not exist
+  end
 end

@@ -18,6 +18,8 @@ LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash 
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
+BACKUPS=true
+BACKUP_EXCLUDE=()
 
 # Load config file
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
@@ -83,6 +85,12 @@ function init {
 REMOTE_HOST=$1
 REMOTE_PATH="$2"
 
+## Enable file revisioning (>false< to disable)
+BACKUPS=true
+# These files are *not* revisioned. These use bash wildcard patterns instead of
+# rsync filter patterns
+BACKUP_EXCLUDE=( '*.tmp' '*.temp' '~\$*' '*.TMP' )
+
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
@@ -102,6 +110,21 @@ EOF
 function log {
   assert_dotdir
   tail -f "$DOT_DIR/log"
+}
+
+function should_backup() {
+  # Ensure backups are enabled, this is a file (not a dir or link), and that
+  # the file exists locally
+  [[ $BACKUPS && -f "$1" ]] || return 1
+
+  # Handle backup exclusions
+  for ex in "${BACKUP_EXCLUDE[@]}"
+  do
+    [[ "$1" == $ex ]]             && return 1
+    [[ $(basename "$1") == $ex ]] && return 1
+  done
+
+  return 0
 }
 
 function pull() {
@@ -131,7 +154,7 @@ function pull() {
     filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}
-      if [[ -f "$filename" ]]; then
+      if should_backup "$filename"; then
         [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
           || mkdir -p "$DOT_DIR"/backups/$TIMESTAMP
         cp --parents -p --reflink=auto "$filename" \

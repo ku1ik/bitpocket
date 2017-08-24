@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then

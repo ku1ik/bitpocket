@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
-if [ -z "$LANG" ]; then
+if [[ -z "$LANG" ]]; then
     LANG="C"
 fi
 
@@ -20,20 +20,24 @@ SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
 
 # Load config file
-[ -f "$CFG_FILE" ] && . "$CFG_FILE"
+[[ -f "$CFG_FILE" ]] && . "$CFG_FILE"
 
 # Test for GNU versions of core utils. Bail if non-GNU.
 sed --version >/dev/null 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo "fatal: It seems like you are running non-GNU versions of coreutils."
-    echo "       It is currently unsafe to use bitpocket with this setup,"
-    echo "       so I'll have to stop here. Sorry ..."
-    echo "       Please visit http://apple.stackexchange.com/a/88812/33076 to set them up on osx."
-    exit 1
+if [[ $? -eq 0 ]]; then
+    alias cp="cp --parents --reflink=auto"
+else
+    echo "\
+Warning: ---------------------------------------------------
+It seems like you are running on a system without GNU coreutils.  bitpocket
+may not work correctly on this platform. Please beware and report any issues
+you encounter.
+"
+    alias sed="sed -E"
 fi
 
 # Decide on runner (ssh / bash -c)
-if [ -n "$REMOTE_HOST" ]; then
+if [[ -n "$REMOTE_HOST" ]]; then
   REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
   REMOTE="$REMOTE_HOST:$REMOTE_PATH"
 else
@@ -44,17 +48,17 @@ fi
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
 
 # Don't sync user excluded files
-if [ -f "$DOT_DIR/exclude" ]; then
+if [[ -f "$DOT_DIR/exclude" ]]; then
   user_exclude="--exclude-from $DOT_DIR/exclude"
 fi
 
 # Specify certain files to include
-if [ -f "$DOT_DIR/include" ]; then
+if [[ -f "$DOT_DIR/include" ]]; then
   user_include="--include-from $DOT_DIR/include"
 fi
 
 # Specify rsync filter rules
-if [ -f "$DOT_DIR/filter" ]; then
+if [[ -f "$DOT_DIR/filter" ]]; then
   # The underscore (_) is required for correct operation
   user_filter="--filter merge_$DOT_DIR/filter"
 fi
@@ -64,6 +68,12 @@ USER_RULES="$user_filter $user_include $user_exclude"
 TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 
 export RSYNC_RSH
+
+function prefix() {
+    while read line; do
+        echo "$1$line"
+    done
+}
 
 function init {
   if [[ -d "$DOT_DIR" || -f "$CFG_FILE" ]]; then
@@ -128,13 +138,14 @@ function pull() {
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | while read line; do
-    filename=$(sed "s:^\S*\s*::" <<< "$line" | sed 's:\d96:\\\`:g')
-    if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
+    filename="${line##* }"
+    filename="${filename//\`/\\\`}"
+    if [[ "$line" =~ (^[ch\<\>][fd]|^\*deleting) ]]; then
       operation=${line%% *}
       if [[ -f "$filename" ]]; then
         [[ -d "$DOT_DIR"/backups/$TIMESTAMP ]] \
           || mkdir -p "$DOT_DIR"/backups/$TIMESTAMP
-        cp --parents -p --reflink=auto "$filename" \
+        cp -p "$filename" \
           "$DOT_DIR"/backups/$TIMESTAMP || die "BACKUP"
         echo "  B $filename" >&3
       fi
@@ -156,14 +167,14 @@ function pull() {
     # Drop trailing slash from folders so the contents are not recursively
     # pulled
     if [[ -d "$filename" && ${filename: -1} == '/' ]]; then
-      filename="${filename:0:-1}"
+      filename="${filename:0:((${#filename}-1))}"
     fi
     # Sync the file. Use a NULL byte delimiter
     printf '%s\0' "$filename"
   done \
   | rsync --files-from=- --from0 -auzxi $RSYNC_OPTS $USER_RULES \
         $REMOTE/ . \
-  | sed "s/^/  | /" || die "PULL"
+  | prefix "  | " || die "PULL"
 
   # Close extra file descriptors
   exec 4>&-
@@ -184,7 +195,7 @@ function push() {
   cat "$TMP_DIR/remote-del" \
   | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
       --exclude-from - $USER_RULES . $REMOTE/ \
-  | sed "s/^/  | /" || die "PUSH"
+  | prefix "  | " || die "PUSH"
 }
 
 # Do the actual synchronization
@@ -215,7 +226,7 @@ function sync {
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
       | grep "^[dl-]" \
-      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
+      | sed -e 's:^[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*:/:' -e 's:^/\.$::' \
       | sort > "$STATE_DIR/remote-tree-current" &
     local remote_tree_pid=$!
   fi
@@ -223,7 +234,7 @@ function sync {
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | grep "^[dl-]" \
-      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
+      | sed -e 's:^[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*:/:' -e 's:^/\.$::' \
       | sort > "$STATE_DIR/tree-current" \
       || die "SNAPSHOT"
 
@@ -253,7 +264,7 @@ function sync {
   # and added via the pull()
   sort "$TMP_DIR/tree-after" \
   | comm -13 "$TMP_DIR/pull-delete" - \
-  | sed -e "s:^\s*::" -e "s:/\$::" \
+  | sed -e "s:^[[:space:]]*::" -e "s:/\$::" \
   > "$STATE_DIR/tree-prev"
 
   rm "$TMP_DIR/tree-after"
@@ -425,7 +436,7 @@ function die {
 function list {
   echo -e "\x1b\x5b1;32mbitpocket\x1b\x5b0m will sync the following files:"
   rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
-      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort
+      | sed "s:^[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*:/:" | sed "s:^/\.::" | sort
 }
 
 function usage {

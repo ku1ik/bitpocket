@@ -127,6 +127,13 @@ function log {
   tail -f "$DOT_DIR/log"
 }
 
+function prefix() {
+    while read line
+    do
+        echo "$1$line"
+    done
+}
+
 function pull() {
   # Actual fetch
   # Pulling changes from server
@@ -144,11 +151,20 @@ function pull() {
   # for logging of deleted files, which need to be sorted
   exec 3> >(sort > "$TMP_DIR/pull-delete")
 
-  # Determine what will be fetched from server and make backup
-  # copies of any local files to be deleted or overwritten.
+  # Determine what will be fetched from server and make backup copies of any
+  # local files to be deleted or overwritten.
+  #
+  # Only delete locally if deleted remotely. To do this, use the remote-del
+  # file to set the *R*isk filter flag (allow delete), and protect everything
+  # else with the *P*rotect flag.
+  #
   # Order of includes/excludes/filters is EXTREMELY important
-  rsync -auzxi --delete-delay --exclude "/$DOT_DIR" \
+  cat "$TMP_DIR/remote-del" \
+  | prefix "R " \
+  | rsync -auzxi --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-add-del" \
+	--filter=". -" \
+	--filter="P **" \
         $DO_BACKUP \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
@@ -181,12 +197,8 @@ function detect_changes() {
         operation=${line%% *}
         if [[ "$operation" == "*deleting" ]]
         then
-            # Only delete locally if deleted remotely
-            if grep -q -x "/$filename" "$TMP_DIR/remote-del"
-            then
-                # Delete here rather than syncing
-                echo "/$filename" >&3
-            fi
+            # Mark as locally deleted
+	    echo "/$filename" >&3
         elif [[ "$operation" =~ \+\+\+\+$ ]]
         then
             # Mark as added locally

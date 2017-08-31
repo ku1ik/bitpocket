@@ -241,6 +241,17 @@ function push() {
   fi
 }
 
+function scrub_rsync_list {
+    # Capture the 5th column, remove blank lines, drop the `/.` folder/file,
+    # and escape files with `[*?` characters in them
+    sed -En '/^[dl-]/ {
+        s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:
+        /^\/\.$/ b
+        s:([*?[]):\\\1:g
+        p
+    }'
+}
+
 # Do the actual synchronization
 function sync {
   assert_dotdir
@@ -268,16 +279,14 @@ function sync {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
-      | grep "^[dl-]" \
-      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
+      | scrub_rsync_list \
       | sort > "$STATE_DIR/remote-tree-current" &
     local remote_tree_pid=$!
   fi
 
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
-      | grep "^[dl-]" \
-      | sed -e "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" -e "s:^/\.$::" \
+      | scrub_rsync_list \
       | sort > "$STATE_DIR/tree-current" \
       || die "SNAPSHOT"
 
@@ -285,10 +294,8 @@ function sync {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     # Escape rsync filter wildcard characters, remove blank lines
     comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" \
-    | grep -v '^$' \
-    | sed -E 's:([*?[]):\\\1:g' \
     | tee >(grep '^\S' > "$TMP_DIR/local-del") \
-          >(sed -n "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add") \
+          >(sed -ne "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add") \
     > /dev/null
   else
     # In the case of a new sync, where no previous tree snapshot is available,
@@ -303,7 +310,6 @@ function sync {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     wait $remote_tree_pid
     comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" \
-    | sed -E 's:([[*?]):\\\1:g' \
     > "$TMP_DIR/remote-del"
   fi
 
@@ -486,8 +492,9 @@ function die {
 # List all files in the sync set
 function list {
   echo -e "${GREEN}bitpocket\x1b\x5b0m will sync the following files:"
-  rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . | grep "^-\|^d" \
-      | sed "s:^\S*\s*\S*\s*\S*\s*\S*\s*:/:" | sed "s:^/\.::" | sort
+  rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . \
+      | scrub_rsync_list \
+      | sort
 }
 
 function usage {

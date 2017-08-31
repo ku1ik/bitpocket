@@ -98,4 +98,42 @@ describe 'bitpocket sync' do
     remote_path('a/c').should_not exist
     remote_path('a/f').should_not exist
   end
+
+  it 'does not remove new local files which contain []`*?' do
+    touch remote_path('a*')
+    touch remote_path('b?')
+
+    sync.should succeed
+
+    local_path('a*').should exist
+    remote_path('a*').should exist
+    local_path('b?').should exist
+    remote_path('b?').should exist
+
+    touch local_path('[]')
+    touch local_path('`hello')
+
+    sync.should succeed
+
+    local_path('[]').should exist
+    remote_path('[]').should exist
+    local_path('`hello').should exist
+    remote_path('`hello').should exist
+
+    rm local_path('[]')
+    rm local_path('`hello')
+    rm remote_path('a*')
+    rm remote_path('b?')
+
+    sync.should succeed
+
+    local_path('a*').should_not exist
+    remote_path('a*').should_not exist
+    local_path('b?').should_not exist
+    remote_path('b?').should_not exist
+    local_path('[]').should_not exist
+    remote_path('[]').should_not exist
+    local_path('`hello').should_not exist
+    remote_path('`hello').should_not exist
+  end
 end

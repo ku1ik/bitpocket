@@ -117,7 +117,7 @@ function log {
 }
 
 function prefix() {
-    while read line
+    while read -r line
     do
         echo "$1$line"
     done
@@ -148,8 +148,7 @@ function pull() {
   # else with the *P*rotect flag.
   #
   # Order of includes/excludes/filters is EXTREMELY important
-  cat "$TMP_DIR/remote-del" \
-  | prefix "R " \
+  prefix "R " < "$TMP_DIR/remote-del" \
   | rsync -auzxi --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-add" \
         --exclude-from="$TMP_DIR/local-del" \
@@ -180,7 +179,7 @@ function detect_changes() {
     # of each of the files. If they are requested to be deleted (indicated by
     # the tag at the line beginning), then they are deleted here. Write the
     # filenames to STDOUT which need to be synchronized by `rsync`
-    while read line
+    while read -r line
     do
         filename="${line#* }"
         filename="${filename//\`/\\\`}"
@@ -284,8 +283,10 @@ function sync {
 
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
+    # Escape rsync filter wildcard characters, remove blank lines
     comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" \
     | grep -v '^$' \
+    | sed -E 's:([*?[]):\\\1:g' \
     | tee >(grep '^\S' > "$TMP_DIR/local-del") \
           >(sed -n "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add") \
     > /dev/null
@@ -301,7 +302,9 @@ function sync {
   touch "$TMP_DIR/remote-del"
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     wait $remote_tree_pid
-    comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" > "$TMP_DIR/remote-del"
+    comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" \
+    | sed -E 's:([[*?]):\\\1:g' \
+    > "$TMP_DIR/remote-del"
   fi
 
   pull

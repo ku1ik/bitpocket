@@ -151,9 +151,10 @@ function pull() {
   cat "$TMP_DIR/remote-del" \
   | prefix "R " \
   | rsync -auzxi --delete --exclude "/$DOT_DIR" \
-        --exclude-from="$TMP_DIR/local-add-del" \
-	--filter=". -" \
-	--filter="P **" \
+        --exclude-from="$TMP_DIR/local-add" \
+        --exclude-from="$TMP_DIR/local-del" \
+        --filter=". -" \
+        --filter="P **" \
         $DO_BACKUP \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
@@ -213,10 +214,13 @@ function push() {
   fi
 
   # Do not push back remotely deleted files
-  rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
-      --exclude-from="$TMP_DIR/remote-del" \
-      $DO_BACKUP \
-      $USER_RULES . $REMOTE/ \
+  prefix "R " < "$TMP_DIR/local-del" \
+  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+        --exclude-from="$TMP_DIR/remote-del" \
+        --filter=". -" \
+        --filter="P **" \
+        $DO_BACKUP \
+        $USER_RULES . $REMOTE/ \
   | sed "s/^/  | /" || die "PUSH"
 
   if [[ $REMOTE_BACKUPS == true ]]
@@ -280,11 +284,16 @@ function sync {
 
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
-    comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" | sed -e "s:^[^/]*::" > "$TMP_DIR/local-add-del"
+    comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" \
+    | grep -v '^$' \
+    | tee >(grep '^\S' > "$TMP_DIR/local-del") \
+          >(sed -n "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add") \
+    > /dev/null
   else
     # In the case of a new sync, where no previous tree snapshot is available,
     # assume all the files on the local side should be protected
-    cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add-del"
+    cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add"
+    touch "$TMP_DIR/local-del"
   fi
 
   # Prevent deleting local files which were not deleted remotely

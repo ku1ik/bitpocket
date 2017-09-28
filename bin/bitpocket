@@ -20,6 +20,7 @@ SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
 REMOTE_BACKUPS=false
 BACKUPS=true
+REMOTE_MOUNTPOINT=false
 
 # Default command-line options and such
 COMMANDS=()
@@ -134,6 +135,13 @@ REMOTE_BACKUPS=false
 # SLOW_SYNC_TIME=10
 # SLOW_SYNC_START_CMD="notify-send 'BitPocket sync in progress...'"
 # SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
+
+## Indicate a remote mount point. If this is set and the mountpoint is not
+## mounted, then the bitpocket sync will abort. This addresses situations where
+## a sync target appears empty because it is not mounted.  Such a sync might
+## result in all local or remote data disappearing. Give the expected
+## mountpoint of the local and/or remote target.
+# REMOTE_MOUNTPOINT=/
 EOF
 
   echo "Initialized bitpocket directory at `pwd`"
@@ -340,6 +348,7 @@ function analyse {
 # Do the actual synchronization
 function sync {
   assert_dotdir
+  assert_mountpoints
   acquire_lock
   acquire_remote_lock
 
@@ -513,6 +522,24 @@ function assert_dotdir {
   fi
   mkdir -p "$TMP_DIR"
   mkdir -p "$STATE_DIR"
+}
+
+function assert_mountpoints {
+    if [[ ${REMOTE_MOUNTPOINT} != false ]]
+    then
+        # Sanity check -- ensure mountpoint is a parent of local target
+        if [[ "${REMOTE_PATH:0:${#REMOTE_MOUNTPOINT}}" != "${REMOTE_MOUNTPOINT}" ]]
+        then
+            echo -e "${YELLOW}warning: Remote mount point is not a parent of '${REMOTE_PATH}'${CLEAR}"
+        fi
+
+        $REMOTE_RUNNER "mount | grep -E '\s${REMOTE_MOUNTPOINT}\s'" &> /dev/null
+        if [[ $? != 0 ]]
+        then
+            echo -e "${RED}fatal: Remote sync target is not mounted${CLEAR}"
+            exit 4
+        fi
+    fi
 }
 
 function cleanup {

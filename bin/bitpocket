@@ -185,14 +185,14 @@ function pull() {
   | detect_changes \
   | prefix "  | " || die "PULL"
 
+  # Some versions of rsync will create the backup dir, even if it doesn't get
+  # populated with any backups
   if [[ -d "$BACKUP_TARGET" ]]
   then
-      if [[ -n "$(find "$BACKUP_TARGET" -type f)" ]]
+      if (shopt -s nullglob dotglob; f=("$BACKUP_TARGET"/*); ((${#f[@]})))
       then
           echo "  | Some files were backed up to $BACKUP_TARGET"
       else
-          # Some versions of rsync will create the backup dir, even if it doesn't
-          # get populated with any backups
           rmdir "$BACKUP_TARGET"
       fi
   fi
@@ -249,18 +249,18 @@ function push() {
         $USER_RULES . $REMOTE/ \
   | prefix "  | " || die "PUSH"
 
+  # Some versions of rsync will create the backup dir, even if it doesn't get
+  # populated with any backups
   if [[ $REMOTE_BACKUPS == true ]]
   then
       $REMOTE_RUNNER "
       cd '$REMOTE_PATH'
       if [[ -d '$BACKUP_TARGET' ]]
       then
-          if [[ -n \"\$(find '$BACKUP_TARGET' -type f)\" ]]
+          if (shopt -s nullglob dotglob; f=('$BACKUP_TARGET'/*); ((\${#f[@]})))
           then
               echo '  | Some files were backed up to $BACKUP_TARGET'
           else
-              # Some versions of rsync will create the backup dir, even if it doesn't
-              # get populated with any backups
               rmdir '$BACKUP_TARGET'
           fi
       fi

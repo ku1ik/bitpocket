@@ -20,6 +20,7 @@ SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
 REMOTE_BACKUPS=false
 BACKUPS=true
+LOCAL_MOUNTPOINT=false
 
 # Default command-line options and such
 COMMANDS=()
@@ -137,11 +138,16 @@ BACKUPS=true
 ## Make revisions of files on the REMOTE_HOST in the push phase.
 REMOTE_BACKUPS=false
 
+## Rsync Advanced Options --------------------
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
+
+## Use the following if a remote FAT or VFAT filesystem is being synchronized.
+## This is automatically detected for local FAT filesystems.
+# RSYNC_OPTS="--no-perms --no-owner --no-group --modify-window=2"
 
 ## Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10
@@ -412,6 +418,7 @@ function sync {
   acquire_lock
   acquire_remote_lock
   check_state_version
+  detect_fatfs
 
   echo
   echo -e "${GREEN}bitpocket started${CLEAR} at `date`."
@@ -638,6 +645,30 @@ function assert_dotdir {
   fi
   mkdir -p "$TMP_DIR"
   mkdir -p "$STATE_DIR"
+}
+
+function detect_fatfs {
+    # Find the local mountpoint
+    if [[ $LOCAL_MOUNTPOINT == false ]]
+    then
+        if builtin type -p findmnt &> /dev/null
+        then
+            LOCAL_MOUNTPOINT=$(until findmnt . >/dev/null; do cd .. ; done && findmnt -Uno TARGET .)
+        else
+            LOCAL_MOUNTPOINT=$(until $(mount | grep -Ew "$(pwd -P)" >/dev/null); do cd .. ; done && pwd -P)
+        fi
+    fi
+
+    # Detect local mount is FAT and add appropriate
+    local fsinfo=($(mount | grep -Ew "${LOCAL_MOUNTPOINT}"))
+    local fstype=${fsinfo[4]}
+
+    if [[ $fstype == *fat ]]
+    then
+        RSYNC_OPTS="${RSYNC_OPTS} --no-perms --no-owner --no-group --modify-window=2"
+    fi
+
+    # TODO: Consider remote filesystem type?
 }
 
 function cleanup {

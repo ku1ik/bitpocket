@@ -162,7 +162,7 @@ function pull() {
   local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
   local DO_BACKUP=""
 
-  if [[ $REMOTE_BACKUPS == true ]]
+  if [[ $BACKUPS == true ]]
   then
       echo "# >> Saving current state and backing up files (if needed)"
       local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"

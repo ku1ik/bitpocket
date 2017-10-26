@@ -332,6 +332,7 @@ function analyse {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     wait $remote_tree_pid
     comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" \
+    | grep -v '^[[:space:]]*$' \
     > "$TMP_DIR/remote-del"
   fi
 }

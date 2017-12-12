@@ -155,7 +155,7 @@ describe 'bitpocket sync' do
 
   it 'does not remove soft link when -L is not set' do
     cat content, local_path('b')
-    ln local_path('b'), local_path('a')
+    ln 'b', local_path('a')
 
     sync.should succeed
 

@@ -39,6 +39,10 @@ def mv(a, b)
   FileUtils.mv(a, b)
 end
 
+def ln(a,b )
+  FileUtils.ln_s(a, b)
+end
+
 RSpec::Matchers.define :exist do
   match do |filename|
     File.exist?(filename)

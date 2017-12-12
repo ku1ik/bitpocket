@@ -152,4 +152,23 @@ describe 'bitpocket sync' do
 
     File.mtime(local_path('a/')).should == Time.new(2008,1,12,0,0)
   end
+
+  it 'does not remove soft link when -L is not set' do
+    cat content, local_path('b')
+    ln local_path('b'), local_path('a')
+
+    sync.should succeed
+
+    remote_path('a').should exist
+    remote_path('b').should exist
+
+    File.read(remote_path('a')).should == content
+
+    rm local_path('a')
+    cat content + content, local_path('a')
+
+    sync.should succeed
+
+    File.read(remote_path('a')).should == content + content
+  end
 end

@@ -576,13 +576,13 @@ function parseargs() {
             -p|--pretend)   OPTIONS+=('pretend');;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
-            init)           if [[ $# < 2 ]]; then
+            init)           if [[ $# -lt 2 ]]; then
                                 echo "usage: bitpocket init [<REMOTE_HOST>] <REMOTE_PATH>"
                                 exit 128
                             fi
                             COMMANDS+=($1)
                             ARGS+=("$2")
-                            if [[ $# > 2 ]]; then
+                            if [[ $# - 2 ]]; then
                                 ARGS+=("$3")
                                 shift;
                             fi

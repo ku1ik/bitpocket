@@ -582,7 +582,7 @@ function parseargs() {
                             fi
                             COMMANDS+=($1)
                             ARGS+=("$2")
-                            if [[ $# - 2 ]]; then
+                            if [[ $# -gt 2 ]]; then
                                 ARGS+=("$3")
                                 shift;
                             fi

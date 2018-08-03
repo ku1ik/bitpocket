@@ -136,4 +136,20 @@ describe 'bitpocket sync' do
     local_path('`hello').should_not exist
     remote_path('`hello').should_not exist
   end
+
+  it 'does not revert modify time of local folders with new files' do
+    touch local_path('a/a')
+    touch remote_path('a/a')
+    sync.should succeed
+
+    touch local_path('a/b')
+    if RUBY_PLATFORM =~ /darwin/
+      system "touch -mt 200801120000 #{local_path('a/')}"
+    else
+      system "touch -t '200801120000' #{local_path('a/')}"
+    end
+    sync.should succeed
+
+    File.mtime(local_path('a/')).should == Time.new(2008,1,12,0,0)
+  end
 end

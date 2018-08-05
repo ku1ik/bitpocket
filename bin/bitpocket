@@ -324,7 +324,11 @@ function analyse {
     # that the modify times of them are not reverted to the remote ones
     cat "$TMP_DIR/local-del" "$TMP_DIR/local-add" \
     | while read -r line; do
-        echo "${line%/*}/"
+        # Only parent folders of files--not folders
+        if [[ "${line: -1}" != "/" ]]
+        then
+            echo "${line%/*}/"
+        fi
       done \
     | sort -u \
     >> "$TMP_DIR/local-add"

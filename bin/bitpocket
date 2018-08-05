@@ -420,7 +420,7 @@ function sync {
       # and added via the pull()
       #
       # Remove pull-deleted files from the tree-after snapshot
-      sort "$TMP_DIR/tree-after" \
+      sort -k1.12 "$TMP_DIR/tree-after" \
       | comm -23 - "$TMP_DIR/pull-delete" \
       | sed -e "s:/\$::" \
       > "$STATE_DIR/tree-prev"

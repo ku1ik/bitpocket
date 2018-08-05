@@ -319,6 +319,15 @@ function analyse {
     comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" \
     | tee >(grep '^\S' > "$TMP_DIR/local-del") \
     | sed -ne "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add"
+
+    # Also protect the folders where files were locally added and removed so
+    # that the modify times of them are not reverted to the remote ones
+    cat "$TMP_DIR/local-del" "$TMP_DIR/local-add" \
+    | while read -r line; do
+        echo "${line%/*}/"
+      done \
+    | sort -u \
+    >> "$TMP_DIR/local-add"
   else
     # In the case of a new sync, where no previous tree snapshot is available,
     # assume all the files on the local side should be protected

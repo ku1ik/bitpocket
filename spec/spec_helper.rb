@@ -5,7 +5,7 @@ RSYNC_STUB_BIN_PATH = File.join(File.dirname(__FILE__), 'bin')
 PATH = "#{RSYNC_STUB_BIN_PATH}:#{ENV['PATH']}"
 
 def sync(opts={})
-  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{PATH} bash #{BP_BIN_PATH}' >/dev/null"
+  system "bash -c 'CALLBACK=#{opts[:callback]} PATH=#{PATH} bash #{BP_BIN_PATH} #{opts[:flags]}' >/dev/null"
   $?.exitstatus
 end
 

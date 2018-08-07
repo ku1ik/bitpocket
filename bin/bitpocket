@@ -221,7 +221,7 @@ function pull() {
 function detect_changes() {
     # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
     # for logging of deleted files, which need to be sorted
-    exec 3> >(sort > "$TMP_DIR/pull-delete")
+    exec 3> >(grep -Ff /dev/stdin "$STATE_DIR/tree-current" | sort > "$TMP_DIR/pull-delete")
 
     while read -r line
     do
@@ -230,7 +230,7 @@ function detect_changes() {
         filename="${info[@]:2}"
         if [[ "$operation" =~ ^\*deleting ]]
         then
-            grep -F "/$filename" "$STATE_DIR/tree-current" >&3
+            echo "/${filename}" >&3
         elif [[ "$operation" =~ \+\+\+\+$ ]]
         then
             # Mark as added locally (with proper mode)

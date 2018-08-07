@@ -368,6 +368,7 @@ function sync {
 
   if [[ $OPTIONS =~ pretend ]]; then
       RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
+      echo -e "${YELLOW}Pretending to sync only. No changes will be made${CLEAR}"
   fi
 
   pull
@@ -544,9 +545,15 @@ function die {
   cleanup
   bring_the_children_let_me_kill_them
 
-  echo "fatal: command failed $1"
+  echo -e "${RED}fatal${CLEAR}: command failed $1"
   exit 128
 }
+
+function intr_cleanup {
+  die "${YELLOW}Interrupted${CLEAR}"
+}
+
+trap intr_cleanup SIGINT
 
 # List all files in the sync set
 function list {

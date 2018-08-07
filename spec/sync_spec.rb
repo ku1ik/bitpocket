@@ -171,4 +171,28 @@ describe 'bitpocket sync' do
 
     File.read(remote_path('a')).should == content + content
   end
+
+  it 'correcly handles remote deletes with old state files' do
+    cat 'hello', local_path('a')
+    cat 'hello', local_path('b')
+    sync.should succeed
+
+    cat "/a\n/b\n", local_path('.bitpocket/state/tree-prev')
+    rm remote_path('b')
+    sync.should succeed
+
+    local_path('b').should_not exist
+    remote_path('a').should exist
+  end
+
+  it 'correcly handles remote updates with old state files' do
+    cat 'hello', local_path('b')
+    sync.should succeed
+
+    cat "/b\n", local_path('.bitpocket/state/tree-prev')
+    cat 'hello2', remote_path('b')
+    sync.should succeed
+
+    File.read(local_path('b')).should == 'hello2'
+  end
 end

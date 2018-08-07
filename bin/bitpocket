@@ -344,9 +344,28 @@ function analyse {
       # Honor local mode changes (link to file, as well as permissions).
       # These should be protected in the pull phase. Ignore files already
       # masked as locally added or locally removed.
-      comm -23 <(sort "$STATE_DIR/tree-current") <(sort "$STATE_DIR/tree-prev") \
-      | strip_mode \
-      > "$TMP_DIR/local-add-change"
+      if [[ $STATE_VERSION > 1 ]]
+      then
+          # Use comm to detect the differences in the pseudo-sorted files
+          # (they're sorted on column 12). Comm will detect some false
+          # positives, so run the output back through `grep` to check if there
+          # is an exact match in the previous state file. This is much faster
+          # than resorting both of the files if they are somewhat large.
+          comm -23 "$STATE_DIR/tree-current" "$STATE_DIR/tree-prev" 2>/dev/null \
+          | while read -r line
+            do
+                if ! grep -Fxq "$line" "$STATE_DIR/tree-prev"
+                then
+                    echo "$line"
+                fi
+            done \
+          | strip_mode \
+          > "$TMP_DIR/local-add-change"
+      else
+          # In transition to the new state file, ignore the changes in mode
+          comm -23 <(strip_mode < "$STATE_DIR/tree-current") "$STATE_DIR/tree-prev" \
+          > "$TMP_DIR/local-add-change"
+      fi
 
       # Also protect the folders where files were locally added and removed so
       # that the modify times of them are not reverted to the remote ones
@@ -382,10 +401,7 @@ function strip_mode {
         cut -c12-
     else
         # State file version might be intermixed. Evaluate each line
-        while read -r line
-        do
-            [[ ${line:0:1} == ":" ]] && echo "${line:11}" || echo "$line"
-        done
+        sed -E "s/^:.{10}//"
     fi
 }
 

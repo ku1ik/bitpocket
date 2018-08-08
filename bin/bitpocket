@@ -367,14 +367,14 @@ function sync {
   # Build addtion/deletion lists
   analyse
 
-  if [[ $OPTIONS =~ pretend ]]; then
+  if [[ "${OPTIONS[*]}" =~ pretend ]]; then
       RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
   fi
 
   pull
   push
 
-  if [[ ! $OPTIONS =~ pretend ]]; then
+  if [[ ! "${OPTIONS[*]}" =~ pretend ]]; then
       # Save after-sync state
 
       # Generate a incremental snapshot of the local tree including files deleted
@@ -490,7 +490,7 @@ function acquire_lock {
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
-      if [[ $OPTIONS =~ 'force' ]]
+      if [[ "${OPTIONS[*]}" =~ force ]]
       then
         echo -e "${YELLOW}Removing stale, local lock file${CLEAR}"
         rm "$LOCK_DIR/pid" && rmdir "$LOCK_DIR" && acquire_lock && return 0
@@ -551,7 +551,7 @@ function acquire_remote_lock {
             # In this case, this host is holding the lock with the remote server
             # but the sync is no longer running. It is perhaps possible to remove
             # the lock?
-            if [[ $OPTIONS =~ 'force' ]]
+            if [[ "${OPTIONS[*]}" =~ force ]]
             then
                 echo -e "${YELLOW}Removing stale, remote lock file${CLEAR}"
                 $REMOTE_RUNNER "cd '$REMOTE_PATH' && rm '$LOCK_DIR/remote' && rmdir '$LOCK_DIR'"

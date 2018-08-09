@@ -43,9 +43,7 @@ if [[ -t 1 ]]; then
 fi
 
 # Test for GNU versions of core utils. Bail if non-GNU.
-BSD=false
-sed --version >/dev/null 2>/dev/null
-if [[ $? -eq 0 ]]; then
+if sed --version >/dev/null 2>/dev/null; then
     alias cp="cp --parents --reflink=auto"
 else
     echo "\
@@ -55,7 +53,6 @@ may not work correctly on this platform. Please beware and report any issues
 you encounter.
 "
     alias sed="sed -E"
-    BSD=true
 fi
 
 # Decide on runner (ssh / bash -c)
@@ -103,7 +100,7 @@ TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 export RSYNC_RSH
 
 function prefix() {
-    while read line; do
+    while read -r line; do
         echo "$1$line"
     done
 }
@@ -155,7 +152,7 @@ REMOTE_BACKUPS=false
 # SLOW_SYNC_STOP_CMD="notify-send 'BitPocket sync finished'"
 EOF
 
-  echo "Initialized bitpocket directory at `pwd`"
+  echo "Initialized bitpocket directory at $(pwd)"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
 
@@ -232,9 +229,9 @@ function detect_changes() {
 
     while read -r line
     do
-        IFS=":" info=($line)
+        IFS=":" read -ra info <<< "$line"
         operation=${info[0]}
-        filename="${info[@]:2}"
+        filename="${info[*]:2}"
         if [[ "$operation" =~ ^\*deleting ]]
         then
             echo "/${filename}" >&3
@@ -351,7 +348,7 @@ function analyse {
       # Honor local mode changes (link to file, as well as permissions).
       # These should be protected in the pull phase. Ignore files already
       # masked as locally added or locally removed.
-      if [[ $STATE_VERSION > 1 ]]
+      if [[ $STATE_VERSION -gt 1 ]]
       then
           # Use comm to detect the differences in the pseudo-sorted files
           # (they're sorted on column 12). Comm will detect some false
@@ -404,7 +401,7 @@ function analyse {
 }
 
 function strip_mode {
-    if [[ $STATE_VERSION > 1 ]]; then
+    if [[ $STATE_VERSION -gt 1 ]]; then
         cut -c12-
     else
         # State file version might be intermixed. Evaluate each line
@@ -421,7 +418,7 @@ function sync {
   detect_fatfs
 
   echo
-  echo -e "${GREEN}bitpocket started${CLEAR} at `date`."
+  echo -e "${GREEN}bitpocket started${CLEAR} at $(date)."
   echo
 
   # Fire off slow sync start notifier in background
@@ -457,7 +454,7 @@ function sync {
 
   cleanup
   echo
-  echo -e "${GREEN}bitpocket finished${CLEAR} at `date`."
+  echo -e "${GREEN}bitpocket finished${CLEAR} at $(date)."
   echo
 
 }
@@ -467,7 +464,7 @@ function pack {
     assert_dotdir
 
     # Git is required for backup packing
-    if [ ! `builtin type -p git` ]; then
+    if ! builtin type -p git > /dev/null; then
         echo "fatal: For backup packing, git must be installed"
         exit 128
     fi
@@ -541,17 +538,17 @@ function cron {
 }
 
 function timestamp {
-  while read data
+  while read -r data
   do
       echo "[$(date +"%D %T")] $data"
   done
 }
 
 function acquire_lock {
-  if ! mkdir "$LOCK_DIR" 2>/dev/null ; then
-    kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
-
-    if [[ $? == 0 ]]; then
+  if ! mkdir "$LOCK_DIR" 2>/dev/null
+  then
+    if kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
+    then
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
@@ -758,19 +755,19 @@ function parseargs() {
             -f|--force)     OPTIONS+=('force');;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
-            init)           if [[ $# < 2 ]]; then
+            init)           if [[ $# -lt 2 ]]; then
                                 echo "usage: bitpocket init [<REMOTE_HOST>] <REMOTE_PATH>"
                                 exit 128
                             fi
-                            COMMANDS+=($1)
+                            COMMANDS+=("$1")
                             ARGS+=("$2")
-                            if [[ $# > 2 ]]; then
+                            if [[ $# -gt 2 ]]; then
                                 ARGS+=("$3")
                                 shift;
                             fi
                             shift;;
-            sync|init|pack|cron|log|list|help)
-                            COMMANDS+=($1);;
+            sync|pack|cron|log|list|help)
+                            COMMANDS+=("$1");;
             # Anything else
             *)              echo "!!! Invalid command: $1";;
         esac
@@ -778,7 +775,7 @@ function parseargs() {
     done
 }
 
-parseargs $*
+parseargs "$@"
 
 # By default, run the sync process
 [[ ${#COMMANDS} == 0 ]] && COMMANDS+=('sync')

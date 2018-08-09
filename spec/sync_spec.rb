@@ -152,4 +152,47 @@ describe 'bitpocket sync' do
 
     File.mtime(local_path('a/')).should == Time.new(2008,1,12,0,0)
   end
+
+  it 'does not remove soft link when -L is not set' do
+    cat content, local_path('b')
+    ln 'b', local_path('a')
+
+    sync.should succeed
+
+    remote_path('a').should exist
+    remote_path('b').should exist
+
+    File.read(remote_path('a')).should == content
+
+    rm local_path('a')
+    cat content + content, local_path('a')
+
+    sync.should succeed
+
+    File.read(remote_path('a')).should == content + content
+  end
+
+  it 'correcly handles remote deletes with old state files' do
+    cat 'hello', local_path('a')
+    cat 'hello', local_path('b')
+    sync.should succeed
+
+    cat "/a\n/b\n", local_path('.bitpocket/state/tree-prev')
+    rm remote_path('b')
+    sync.should succeed
+
+    local_path('b').should_not exist
+    remote_path('a').should exist
+  end
+
+  it 'correcly handles remote updates with old state files' do
+    cat 'hello', local_path('b')
+    sync.should succeed
+
+    cat "/b\n", local_path('.bitpocket/state/tree-prev')
+    cat 'hello2', remote_path('b')
+    sync.should succeed
+
+    File.read(local_path('b')).should == 'hello2'
+  end
 end

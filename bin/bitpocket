@@ -77,6 +77,7 @@ fi
 STATE_VERSION=2
 
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
+HOSTNAME="$(hostname)"
 
 # Don't sync user excluded files
 if [[ -f "$DOT_DIR/exclude" ]]; then
@@ -422,7 +423,7 @@ function sync {
   # Build addtion/deletion lists
   analyse
 
-  if [[ $OPTIONS =~ pretend ]]; then
+  if [[ "${OPTIONS[*]}" =~ pretend ]]; then
       RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
       echo -e "${YELLOW}Pretending to sync only. No changes will be made${CLEAR}"
   fi
@@ -430,7 +431,7 @@ function sync {
   pull
   push
 
-  if [[ ! $OPTIONS =~ pretend ]]; then
+  if [[ ! "${OPTIONS[*]}" =~ pretend ]]; then
       # Save after-sync state
 
       # Generate a incremental snapshot of the local tree including files deleted
@@ -547,6 +548,12 @@ function acquire_lock {
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
+      if [[ "${OPTIONS[*]}" =~ force ]]
+      then
+        echo -e "${YELLOW}Removing stale, local lock file${CLEAR}"
+        rm "$LOCK_DIR/pid" && rmdir "$LOCK_DIR" && acquire_lock && return 0
+      fi
+
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
@@ -564,17 +571,64 @@ function release_lock {
 }
 
 function acquire_remote_lock {
-  $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
+    # TODO: Place the local hostname and this PID in a file, which will make
+    # automatic lock file cleanup possible. It will also offer better output if
+    # another host is truly syncing with the remote host.
+    local INFO="$HOSTNAME:$$:$TIMESTAMP"
+    local REMOTE_INFO=$($REMOTE_RUNNER "
+        mkdir -p '$REMOTE_TMP_DIR' && cd '$REMOTE_PATH'
+        [[ -d '$LOCK_DIR' ]] || mkdir '$LOCK_DIR'
+        [[ -e '$LOCK_DIR'/remote ]] || echo '$INFO' > '$LOCK_DIR'/remote
+        cat '$LOCK_DIR'/remote")
 
-  if [[ $? != 0 ]]; then
-    echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+    [[ "$INFO" == "$REMOTE_INFO" ]] && return 0
+
+    IFS=":" read -ra INFO <<< "$REMOTE_INFO"
+
+    # From here down, assume the lock could not be acquired
+    local code=3
+    if [[ -z $REMOTE_INFO ]]
+    then
+        echo "Couldn't acquire remote lock or lock file couldn't be created. Exiting."
+    elif [[ "$HOSTNAME" != "${INFO[0]}" ]]
+    then
+        echo -e "${YELLOW}Another client is syncing with '$REMOTE'${CLEAR}"
+        echo ">> Host:    ${INFO[0]}"
+        echo ">> PID:     ${INFO[1]}"
+        echo ">> Started: ${INFO[2]}"
+    elif [[ "$$" != "${INFO[1]}" ]]
+    then
+        # This host is syncing with the remote host. Check if the PID is still running
+        if kill -0 "${INFO[1]}" &>/dev/null
+        then
+            # XXX: This should be handled in the `acquire_lock` function
+            echo "Another instance of Bitpocket is currently syncing this" \
+                 "host with '$REMOTE'"
+            code=1
+        else
+            # In this case, this host is holding the lock with the remote server
+            # but the sync is no longer running. It is perhaps possible to remove
+            # the lock?
+            if [[ "${OPTIONS[*]}" =~ force ]]
+            then
+                echo -e "${YELLOW}Removing stale, remote lock file${CLEAR}"
+                $REMOTE_RUNNER "cd '$REMOTE_PATH' && rm '$LOCK_DIR/remote' && rmdir '$LOCK_DIR'"
+                # Try again
+                acquire_remote_lock && return 0
+            fi
+
+            echo "The remote lock is held by this host and is stale." \
+                 "It should be removed, and the sync should be retried."
+            code=6
+        fi
+    fi
+
     release_lock
-    exit 3
-  fi
+    exit $code
 }
 
 function release_remote_lock {
-  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && rmdir \"$LOCK_DIR\" &>/dev/null"
+  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && grep -q '$HOSTNAME:$$' '$LOCK_DIR/remote' && rm '$LOCK_DIR/remote' && rmdir '$LOCK_DIR' &>/dev/null"
 }
 
 function assert_dotdir {
@@ -656,6 +710,7 @@ Available commands:
    help    Show this message.
 
 Options:
+   -f, --force      Clean up stale lock files automatically
    -p, --pretend    Don't really perform the sync or update the current
                     state. Instead, show what would be synchronized.
 
@@ -669,6 +724,7 @@ function parseargs() {
         case $1 in
             # Switches and configuration
             -p|--pretend)   OPTIONS+=('pretend');;
+            -f|--force)     OPTIONS+=('force');;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
             init)           if [[ $# < 2 ]]; then
@@ -684,6 +740,7 @@ function parseargs() {
                             shift;;
             sync|init|pack|cron|log|list|help)
                             COMMANDS+=($1);;
+            # Anything else
             *)              echo "!!! Invalid command: $1";;
         esac
         shift

@@ -443,7 +443,7 @@ function sync {
       #
       # Remove pull-deleted files from the tree-after snapshot
       sort -k1.12 "$TMP_DIR/tree-after" \
-      | comm -23 - "$TMP_DIR/pull-delete" \
+      | comm -23 - "$TMP_DIR/pull-delete" 2> /dev/null \
       | sed -e "s:/\$::" \
       > "$STATE_DIR/tree-prev"
   fi
@@ -650,7 +650,7 @@ function detect_fatfs {
     then
         if builtin type -p findmnt &> /dev/null
         then
-            LOCAL_MOUNTPOINT=$(until findmnt . >/dev/null; do cd .. ; done && findmnt -Uno TARGET .)
+            LOCAL_MOUNTPOINT=$(until findmnt . >/dev/null; do cd .. ; done && findmnt -no TARGET .)
         else
             LOCAL_MOUNTPOINT=$(until $(mount | grep -Ew "$(pwd -P)" >/dev/null); do cd .. ; done && pwd -P)
         fi

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -34,17 +34,16 @@ OPTIONS=()
 GREEN=""
 RED=""
 CLEAR=""
-YELLOW=""
 if [[ -t 1 ]]; then
-    GREEN="\x1b\x5b1;32m"
-    RED="\x1b\x5b1;31m"
-    YELLOW="\x1b\x5b1;33m"
-    CLEAR="\x1b\x5b0m"
+    GREEN="\\x1b\\x5b1;32m"
+    RED="\\x1b\\x5b1;31m"
+    CLEAR="\\x1b\\x5b0m"
 fi
 
 # Test for GNU versions of core utils. Bail if non-GNU.
 sed --version >/dev/null 2>/dev/null
-if [[ $? -eq 0 ]]; then
+if [[ $? -eq 0 ]];
+then
     alias cp="cp --parents --reflink=auto"
 else
     echo "\
@@ -144,7 +143,7 @@ REMOTE_BACKUPS=false
 # REMOTE_MOUNTPOINT=/
 EOF
 
-  echo "Initialized bitpocket directory at `pwd`"
+  echo "Initialized bitpocket directory at $PWD"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
 
@@ -196,8 +195,8 @@ function pull() {
         --exclude-from="$TMP_DIR/local-del" \
         --filter=". -" \
         --filter="P **" \
-        $DO_BACKUP \
-        $RSYNC_OPTS $USER_RULES $REMOTE/ . \
+        "$DO_BACKUP" \
+        "$RSYNC_OPTS $USER_RULES $REMOTE"/ . \
   | detect_changes \
   | prefix "  | " || die "PULL"
 
@@ -257,12 +256,12 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete "$RSYNC_OPTS" --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
-        $DO_BACKUP \
-        $USER_RULES . $REMOTE/ \
+        "$DO_BACKUP" \
+        "$USER_RULES" . "$REMOTE/" \
   | prefix "  | " || die "PUSH"
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
@@ -309,14 +308,14 @@ function analyse {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+    rsync --list-only --recursive --exclude "/$DOT_DIR" "$USER_RULES" "$REMOTE/" \
       | scrub_rsync_list \
       | sort > "$STATE_DIR/remote-tree-current" &
     local remote_tree_pid=$!
   fi
 
   # Collect the current snapshot of the local tree
-  rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
+  rsync --list-only --recursive --exclude "/$DOT_DIR" "$USER_RULES" . \
       | scrub_rsync_list \
       | sort > "$STATE_DIR/tree-current" \
       || die "SNAPSHOT"
@@ -417,12 +416,12 @@ function pack {
     then
         for DIR in $DOT_DIR/backups/*
         do
-            TSTAMP=$(echo $DIR | sed "s|.*/||")
+            TSTAMP=$(echo "$DIR" | sed "s|.*/||")
             if [ "$(ls -A $DIR)" ]
             then
                 echo -n "Processing: $TSTAMP ... "
                 echo -n "Moving ... "
-                (cp -rfl $DIR/* $DOT_DIR/pack && rm -rf $DIR)        || die MV
+                (cp -rfl "$DIR/*" $DOT_DIR/pack && rm -rf "$DIR")        || die MV
                 echo -n "Adding ... "
                 (cd $DOT_DIR/pack && git add .)                      || die ADD
                 echo -n "Committing ... "
@@ -433,7 +432,7 @@ function pack {
                 echo "Done."
             else
                 echo "Removing empty dir $DIR  ..."
-                rmdir $DIR
+                rmdir "$DIR"
             fi
         done
         echo "Running 'git gc' on pack dir"
@@ -565,13 +564,13 @@ function die {
 # List all files in the sync set
 function list {
   echo -e "${GREEN}bitpocket${CLEAR} will sync the following files:"
-  rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . \
+  rsync -av --list-only --exclude "/$DOT_DIR"  "$USER_RULES" . \
       | scrub_rsync_list \
       | sort
 }
 
 function usage {
-  cat <<EOF  
+  cat <<EOF
 usage:  bitpocket { init [<REMOTE_HOST>] <REMOTE_PATH>
                   | sync | help | pack | log | cron | list }
 
@@ -604,13 +603,13 @@ function parseargs() {
             -p|--pretend)   OPTIONS+=('pretend');;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
-            init)           if [[ $# < 2 ]]; then
+            init)           if [[ $# -lt 2 ]]; then
                                 echo "usage: bitpocket init [<REMOTE_HOST>] <REMOTE_PATH>"
                                 exit 128
                             fi
                             COMMANDS+=($1)
                             ARGS+=("$2")
-                            if [[ $# > 2 ]]; then
+                            if [[ $# -gt 2 ]]; then
                                 ARGS+=("$3")
                                 shift;
                             fi

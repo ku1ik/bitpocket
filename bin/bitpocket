@@ -502,13 +502,19 @@ function release_lock {
 }
 
 function acquire_remote_lock {
+  tries=0
   $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
-
-  if [[ $? != 0 ]]; then
-    echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
-    release_lock
-    exit 3
-  fi
+  while [[ $? != 0 ]]; do
+    if [ $tries -gt 20 ]; then
+      echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+      release_lock
+      exit 3
+    else
+      ((tries++))
+      sleep 10
+      $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
+    fi
+  done
 }
 
 function release_remote_lock {
@@ -571,7 +577,7 @@ function list {
 }
 
 function usage {
-  cat <<EOF  
+  cat <<EOF
 usage:  bitpocket { init [<REMOTE_HOST>] <REMOTE_PATH>
                   | sync | help | pack | log | cron | list }
 

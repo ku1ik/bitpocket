@@ -21,6 +21,7 @@ RSYNC_RSH="ssh"
 REMOTE_BACKUPS=false
 BACKUPS=true
 REMOTE_MOUNTPOINT=false
+LOCK_ACQUIRE_TIMEOUT=60
 
 # Default command-line options and such
 COMMANDS=()
@@ -127,6 +128,9 @@ REMOTE_BACKUPS=false
 
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
+
+## By default, the program will wait for 60 seconds to acquire a lock on the remote host (in case other clients are currently syncing). Change this value to the desired timeout value in seconds 0 to disable the wait time.
+# LOCK_ACQUIRE_TIMEOUT=60
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
@@ -502,16 +506,16 @@ function release_lock {
 }
 
 function acquire_remote_lock {
-  tries=0
+  start=$SECONDS
   $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
   while [[ $? != 0 ]]; do
-    if [ $tries -gt 20 ]; then
+    duration=$(( $SECONDS - $start ))
+    if [ $duration -gt $LOCK_ACQUIRE_TIMEOUT ] || [ $LOCK_ACQUIRE_TIMEOUT -eq 0 ]; then
       echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
       release_lock
       exit 3
     else
-      ((tries++))
-      sleep 10
+      sleep 5
       $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
     fi
   done
@@ -595,8 +599,11 @@ Available commands:
    help    Show this message.
 
 Options:
-   -p, --pretend    Don't really perform the sync or update the current
-                    state. Instead, show what would be synchronized.
+   -p, --pretend                     Don't really perform the sync or update the current
+                                     state. Instead, show what would be synchronized.
+   -w=WAIT_TIME, --wait=WAIT_TIME    Number of seconds to wait when trying to acquire a
+                                     lock on a remote host. This is useful if several
+                                     are syncing at the same time.
 
 Note: All commands (apart from help), must be run in the root of a
       new or existing bitpocket directory structure.
@@ -608,6 +615,7 @@ function parseargs() {
         case $1 in
             # Switches and configuration
             -p|--pretend)   OPTIONS+=('pretend');;
+            -w=*|--wait=*)   LOCK_ACQUIRE_TIMEOUT="${1#*=}";;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
             init)           if [[ $# < 2 ]]; then

@@ -196,7 +196,7 @@ function pull() {
   #
   # Order of includes/excludes/filters is EXTREMELY important
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzxi --delete --partial --partial-dir="$PARTIAL_DIR" --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --partial-dir="$PARTIAL_DIR" --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-add" \
         --exclude-from="$TMP_DIR/local-del" \
         --filter=". -" \
@@ -266,7 +266,7 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -auzxi --delete --partial --partial-dir="$PARTIAL_DIR" $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --partial-dir="$PARTIAL_DIR" $RSYNC_OPTS --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \

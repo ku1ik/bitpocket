@@ -8,12 +8,12 @@ fi
 export LC_ALL=$LANG # for stable "sort" output
 
 # Paths
-DOT_DIR=.bitpocket
+DOT_DIR=`pwd`/.bitpocket
 CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
-PARTIAL_DIR="`pwd`/$DOT_DIR/partials"
+PARTIAL_DIR="$DOT_DIR/partials"
 
 # Default settings
 SLOW_SYNC_TIME=10

@@ -280,7 +280,7 @@ function push() {
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
-  if [[ $REMOTE_BACKUPS == true && success == 0 ]]
+  if [[ $REMOTE_BACKUPS == true ]]
   then
       $REMOTE_RUNNER "
       cd '$REMOTE_PATH'

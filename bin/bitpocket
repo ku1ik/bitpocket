@@ -13,6 +13,7 @@ CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+PARTIAL_DIR="$DOT_DIR/partials"
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -195,7 +196,7 @@ function pull() {
   #
   # Order of includes/excludes/filters is EXTREMELY important
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzxi --delete --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --partial --partial-dir="$PARTIAL_DIR" --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-add" \
         --exclude-from="$TMP_DIR/local-del" \
         --filter=". -" \
@@ -203,7 +204,11 @@ function pull() {
         $DO_BACKUP \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
-  | prefix "  | " || die "PULL"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]
+  then
+    die "PULL"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -261,17 +266,21 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --partial --partial-dir="$PARTIAL_DIR" $RSYNC_OPTS --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
         $DO_BACKUP \
         $USER_RULES . $REMOTE/ \
-  | prefix "  | " || die "PUSH"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]
+  then
+    die "PUSH"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
-  if [[ $REMOTE_BACKUPS == true ]]
+  if [[ $REMOTE_BACKUPS == true && success == 0 ]]
   then
       $REMOTE_RUNNER "
       cd '$REMOTE_PATH'

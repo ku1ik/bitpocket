@@ -205,8 +205,7 @@ function pull() {
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
   | prefix "  | "
-  if [[ ${PIPESTATUS[1]} != 0 ]]
-  then
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
     die "PULL"
   fi
 
@@ -273,8 +272,7 @@ function push() {
         $DO_BACKUP \
         $USER_RULES . $REMOTE/ \
   | prefix "  | "
-  if [[ ${PIPESTATUS[1]} != 0 ]]
-  then
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
     die "PUSH"
   fi
 
@@ -332,8 +330,7 @@ function analyse {
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | scrub_rsync_list \
       | sort > "$STATE_DIR/tree-current"
-  if [[ ${PIPESTATUS[0]} != 0 ]]
-  then
+  if [[ ${PIPESTATUS[0]} != 0 ]]; then
     die "SNAPSHOT"
   fi
 

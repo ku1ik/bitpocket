@@ -331,8 +331,11 @@ function analyse {
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | scrub_rsync_list \
-      | sort > "$STATE_DIR/tree-current" \
-      || die "SNAPSHOT"
+      | sort > "$STATE_DIR/tree-current"
+  if [[ ${PIPESTATUS[0]} != 0 ]]
+  then
+    die "SNAPSHOT"
+  fi
 
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]; then

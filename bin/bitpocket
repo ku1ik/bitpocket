@@ -57,13 +57,16 @@ you encounter.
 fi
 
 # Decide on runner (ssh / bash -c)
-if [[ -n "$REMOTE_HOST" ]]; then
-  REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
-  REMOTE="$REMOTE_HOST:$REMOTE_PATH"
-else
-  REMOTE_RUNNER="bash -c"
-  REMOTE="$REMOTE_PATH"
-fi
+function setup_remote() {
+    if [[ -n "$REMOTE_HOST" ]]; then
+      REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
+      REMOTE="$REMOTE_HOST:$REMOTE_PATH"
+    else
+      REMOTE_RUNNER="bash -c"
+      REMOTE="$REMOTE_PATH"
+    fi
+}
+setup_remote
 
 # Version of the state files. Original version is 1, second version with
 # leading mode is 2.
@@ -118,8 +121,9 @@ function init {
   fi
 
   REMOTE_PATH="$1"
-  if [[ ! -d "$1" ]]; then
-    echo "fatal: '$1': Remote path is not accessible"
+  setup_remote
+  if $REMOTE_RUNNER "[ ! -d '$1' ]"; then
+    echo "fatal: '$REMOTE': Remote path is not accessible"
     exit 128
   fi
 
@@ -755,7 +759,7 @@ Available commands:
    sync    Run the sync process. If no command is specified, sync is run by
            default.
    init    Initialize a new bitpocket folder. Requires path and optional
-           remote hostparams.
+           remote host params. Remote path must already exist.
    pack    Pack any existing (automatic) backups into a git repository.
    cron    Run sync optimized for cron, logging output to file instead of
            stdout.

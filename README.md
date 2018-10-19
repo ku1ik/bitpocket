@@ -67,12 +67,12 @@ Running `bitpocket help` will display the following message.
        help    Show this message.
 
     Options:
+       -f, --force      Clean up stale lock files automatically
        -p, --pretend    Don't really perform the sync or update the current
                         state. Instead, show what would be synchronized.
 
     Note: All commands (apart from help), must be run in the root of a
           new or existing bitpocket directory structure.
-
 
 ### Manual sync (bitpocket sync)
 
@@ -173,17 +173,6 @@ authentication:
 and uncomment line with `RSYNC_SSH` in _.bitpocket/config_ file.
 
 
-### Custom rsync options
-
-You can pass additional switches to `rsync` by setting `RSYNC_OPTS` in
-_.bitpocket/config_ file. Generated config file includes (commented out)
-example setting for dereferencing symlinks:
-
-    # RSYNC_OPTS="-L"
-
-Just uncomment it and change at will.
-
-
 ### Configuring file exclusion and inclusion
 
 If you want some files to be ignored by bitpocket you can create
@@ -211,6 +200,26 @@ into bitpocket. If you decide that you need such advanced configuration, make
 sure that you understand those rules very well, and consider double checking
 them before syncing by running `bitpocket list`.
 
+### Backup options
+
+Both local and remote backups can be enabled or disabled in the configuration.
+By default, local backups are enabled and remote backups are not. Based on how
+intend to use bitpocket, you may wish to change this behavior. Add or change
+these lines in your _.bitpocket/config_ file:
+
+    # BACKUPS=true
+    # REMOTE_BACKUPS=false
+
+### Custom rsync options
+
+You can pass additional switches to `rsync` by setting `RSYNC_OPTS` in
+_.bitpocket/config_ file. Generated config file includes (commented out)
+example setting for dereferencing symlinks:
+
+    # RSYNC_OPTS="-L"
+
+Just uncomment it and change at will.
+
 
 ### Slow sync callbacks
 
@@ -233,6 +242,16 @@ You can show tray icon during long sync with
     SLOW_SYNC_START_CMD='~/bin/traytor -t "BitPocket syncing..." -c "xdg-open ." .bitpocket/icons & echo $! >.bitpocket/traytor.pid'
     SLOW_SYNC_STOP_CMD='kill `cat .bitpocket/traytor.pid`'
 
+
+### Failsafes
+
+You can add a remote mount point check to ensure a remote path is available
+prior to the sync running. If the folder is not mounted on the remote server,
+then the sync will be aborted. The path must be an absolute path which is
+expected to be a mountpoint on the remote server. Add or change this lines in
+your _.bitpocket/config_ file:
+
+    # REMOTE_MOUNTPOINT=/
 
 ## Author
 

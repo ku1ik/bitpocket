@@ -148,7 +148,7 @@ REMOTE_BACKUPS=false
 ## mountpoint of the local and/or remote target.
 # REMOTE_MOUNTPOINT=/
 EOF
-
+  mkdir -m 700 "$PARTIAL_DIR" #Force create the partials dir with correct permissions
   echo "Initialized bitpocket directory at `pwd`"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
@@ -187,6 +187,9 @@ function pull() {
   # for logging of deleted files, which need to be sorted
   exec 3> >(sort > "$TMP_DIR/pull-delete")
 
+  # Ensure the partial directory has the correct permissions
+  ensure_correct_partial_dir
+
   # Determine what will be fetched from server and make backup copies of any
   # local files to be deleted or overwritten.
   #
@@ -201,6 +204,7 @@ function pull() {
         --exclude-from="$TMP_DIR/local-del" \
         --filter=". -" \
         --filter="P **" \
+        --delay-updates \
         $DO_BACKUP \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
@@ -247,6 +251,23 @@ function detect_changes() {
     done
 }
 
+function ensure_correct_partial_dir() {
+  if [ ! -d "$PARTIAL_DIR" ]; then
+    mkdir -m 700 "$PARTIAL_DIR"
+  fi
+  if [ $(stat -c '%U' "$PARTIAL_DIR") != $(whoami) ]; then
+    echo "File does not belong to current user, cannot continue!"
+    die "PARTIAL DIR CHECK"
+  fi
+  if [ $(stat -c "%a" "$PARTIAL_DIR") != "700" ]; then
+    echo "IMPORTANT: the --partial-dir should not be writable by other users or it is a security risk."
+    chmod 700 "$PARTIAL_DIR"
+  fi
+  if [[ $? != 0 ]]; then
+    die "PARTIAL DIR CHECK"
+  fi
+}
+
 function push() {
   # Actual push
 
@@ -265,7 +286,7 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -auzxi --delete --partial-dir="$PARTIAL_DIR" $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
@@ -501,7 +522,7 @@ function acquire_lock {
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
-      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
+      echo "  | Command:  LOCK_PATH=$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
       echo "Please remove the lock directory and try again."
       exit 2
     fi

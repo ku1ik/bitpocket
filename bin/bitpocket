@@ -8,11 +8,12 @@ fi
 export LC_ALL=$LANG # for stable "sort" output
 
 # Paths
-DOT_DIR=.bitpocket
+DOT_DIR=`pwd`/.bitpocket
 CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+PARTIAL_DIR="$DOT_DIR/partials"
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -167,7 +168,7 @@ REMOTE_BACKUPS=false
 ## mountpoint of the local and/or remote target.
 # REMOTE_MOUNTPOINT=/
 EOF
-
+  mkdir -m 700 "$PARTIAL_DIR" #Force create the partials dir with correct permissions
   echo "Initialized bitpocket directory at $(pwd)"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
@@ -202,6 +203,9 @@ function pull() {
 
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
 
+  # Ensure the partial directory has the correct permissions
+  ensure_correct_partial_dir
+
   # Determine what will be fetched from server and make backup copies of any
   # local files to be deleted or overwritten.
   #
@@ -214,16 +218,20 @@ function pull() {
   # TODO: Consider adding %U and %G to the output format to capture owner and
   # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzx --delete --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --partial-dir="$PARTIAL_DIR" --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
         --filter="P **" \
+        --delay-updates \
         $DO_BACKUP \
         --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
-  | prefix "  | " || die "PULL"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PULL"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -265,6 +273,23 @@ function detect_changes() {
     exec 3>&-
 }
 
+function ensure_correct_partial_dir() {
+  if [ ! -d "$PARTIAL_DIR" ]; then
+    mkdir -m 700 "$PARTIAL_DIR"
+  fi
+  if [ $(stat -c '%U' "$PARTIAL_DIR") != $(whoami) ]; then
+    echo "File does not belong to current user, cannot continue!"
+    die "PARTIAL DIR CHECK"
+  fi
+  if [ $(stat -c "%a" "$PARTIAL_DIR") != "700" ]; then
+    echo "IMPORTANT: the --partial-dir should not be writable by other users or it is a security risk."
+    chmod 700 "$PARTIAL_DIR"
+  fi
+  if [[ $? != 0 ]]; then
+    die "PARTIAL DIR CHECK"
+  fi
+}
+
 function push() {
   # Actual push
 
@@ -289,7 +314,10 @@ function push() {
         --filter="P **" \
         $DO_BACKUP \
         $USER_RULES . $REMOTE/ \
-  | prefix "  | " || die "PUSH"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PUSH"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -348,8 +376,10 @@ function analyse {
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | scrub_rsync_list \
       | sort -k 1.12 \
-      > "$STATE_DIR/tree-current" \
-      || die "SNAPSHOT"
+      > "$STATE_DIR/tree-current"
+      if [[ ${PIPESTATUS[0]} != 0 ]]; then
+        die "SNAPSHOT"
+      fi
 
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]
@@ -578,7 +608,7 @@ function acquire_lock {
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
-      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
+      echo "  | Command:  LOCK_PATH=$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
       echo "Please remove the lock directory and try again."
       exit 2
     fi

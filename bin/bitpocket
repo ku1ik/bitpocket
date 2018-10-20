@@ -20,6 +20,7 @@ SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
 REMOTE_BACKUPS=false
 BACKUPS=true
+LOCAL_MOUNTPOINT=false
 REMOTE_MOUNTPOINT=false
 LOCK_ACQUIRE_TIMEOUT=60
 
@@ -44,8 +45,7 @@ if [[ -t 1 ]]; then
 fi
 
 # Test for GNU versions of core utils. Bail if non-GNU.
-sed --version >/dev/null 2>/dev/null
-if [[ $? -eq 0 ]]; then
+if sed --version >/dev/null 2>/dev/null; then
     alias cp="cp --parents --reflink=auto"
 else
     echo "\
@@ -58,15 +58,29 @@ you encounter.
 fi
 
 # Decide on runner (ssh / bash -c)
-if [[ -n "$REMOTE_HOST" ]]; then
-  REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
-  REMOTE="$REMOTE_HOST:$REMOTE_PATH"
-else
-  REMOTE_RUNNER="bash -c"
-  REMOTE="$REMOTE_PATH"
-fi
+function setup_remote() {
+    if [[ -n "$REMOTE_HOST" ]]; then
+      REMOTE_RUNNER="$RSYNC_RSH $REMOTE_HOST"
+      REMOTE="$REMOTE_HOST:$REMOTE_PATH"
+    else
+      REMOTE_RUNNER="bash -c"
+      REMOTE="$REMOTE_PATH"
+    fi
+}
+setup_remote
+
+# Version of the state files. Original version is 1, second version with
+# leading mode is 2.
+#
+# Current state version is 2, and the format of the state file is
+# ":" TYPE MODE "/" PATH "\n"
+# Where TYPE = ("-" | "d" | "l" )
+#       MODE = unix mode (9-character) (like "rw-rw-r--")
+#       PATH = relative full-path of file
+STATE_VERSION=2
 
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
+HOSTNAME="$(hostname)"
 
 # Don't sync user excluded files
 if [[ -f "$DOT_DIR/exclude" ]]; then
@@ -91,7 +105,7 @@ TIMESTAMP=$(date "+%Y-%m-%d.%H%M%S")
 export RSYNC_RSH
 
 function prefix() {
-    while read line; do
+    while read -r line; do
         echo "$1$line"
     done
 }
@@ -108,8 +122,9 @@ function init {
   fi
 
   REMOTE_PATH="$1"
-  if [[ ! -d "$1" ]]; then
-    echo "fatal: '$1': Remote path is not accessible"
+  setup_remote
+  if $REMOTE_RUNNER "[ ! -d '$1' ]"; then
+    echo "fatal: '$REMOTE': Remote path is not accessible"
     exit 128
   fi
 
@@ -126,6 +141,7 @@ BACKUPS=true
 ## Make revisions of files on the REMOTE_HOST in the push phase.
 REMOTE_BACKUPS=false
 
+## Rsync Advanced Options --------------------
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
@@ -134,6 +150,10 @@ REMOTE_BACKUPS=false
 
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
+
+## Use the following if a remote FAT or VFAT filesystem is being synchronized.
+## This is automatically detected for local FAT filesystems.
+# RSYNC_OPTS="--no-perms --no-owner --no-group --modify-window=2"
 
 ## Uncomment following lines to get sync notifications
 # SLOW_SYNC_TIME=10
@@ -148,7 +168,7 @@ REMOTE_BACKUPS=false
 # REMOTE_MOUNTPOINT=/
 EOF
 
-  echo "Initialized bitpocket directory at `pwd`"
+  echo "Initialized bitpocket directory at $(pwd)"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
 
@@ -182,10 +202,6 @@ function pull() {
 
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
 
-  # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
-  # for logging of deleted files, which need to be sorted
-  exec 3> >(sort > "$TMP_DIR/pull-delete")
-
   # Determine what will be fetched from server and make backup copies of any
   # local files to be deleted or overwritten.
   #
@@ -194,13 +210,17 @@ function pull() {
   # else with the *P*rotect flag.
   #
   # Order of includes/excludes/filters is EXTREMELY important
+  #
+  # TODO: Consider adding %U and %G to the output format to capture owner and
+  # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzxi --delete --exclude "/$DOT_DIR" \
-        --exclude-from="$TMP_DIR/local-add" \
+  | rsync -auzx --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
+        --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
         --filter="P **" \
         $DO_BACKUP \
+        --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
   | prefix "  | " || die "PULL"
@@ -216,31 +236,33 @@ function pull() {
           rmdir "$BACKUP_TARGET"
       fi
   fi
-
-  exec 3>&-
 }
 
 function detect_changes() {
-    # Read file names from STDIN, and, if they exist locally, create a backup
-    # of each of the files. If they are requested to be deleted (indicated by
-    # the tag at the line beginning), then they are deleted here. Write the
-    # filenames to STDOUT which need to be synchronized by `rsync`
+    # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
+    # for logging of deleted files, which need to be sorted
+    exec 3> >(grep -Ff /dev/stdin "$STATE_DIR/tree-current" | sort > "$TMP_DIR/pull-delete")
+
     while read -r line
     do
-        filename="${line#* }"
-        filename="${filename//\`/\\\`}"
-        operation=${line%% *}
-        if [[ "$operation" == "*deleting" ]]
+        IFS=":" read -ra info <<< "$line"
+        operation=${info[0]}
+        filename="${info[*]:2}"
+        if [[ "$operation" =~ ^\*deleting ]]
         then
-            # Mark as locally deleted
-	    echo "/$filename" >&3
+            echo "/${filename}" >&3
         elif [[ "$operation" =~ \+\+\+\+$ ]]
         then
-            # Mark as added locally
-            echo "/$filename" >> "$TMP_DIR/tree-after"
+            # Mark as added locally (with proper mode)
+            mode=${info[1]}
+            filetype="${operation:1:1}"
+            filetype="${filetype/f/-}"
+            echo ":${filetype}${mode}/$filename" >> "$TMP_DIR/tree-after"
         fi
-        echo "$line"
+        echo "$operation $filename"
     done
+
+    exec 3>&-
 }
 
 function push() {
@@ -289,11 +311,13 @@ function push() {
 }
 
 function scrub_rsync_list {
-    # Capture the 5th column, remove blank lines, drop the `/.` folder/file,
-    # and escape files with `[*?` characters in them
+    # Capture the 1st and 5th columns (mode and file name), remove blank lines,
+    # drop the `/.` folder/file, and escape files with `[*?` characters in
+    # them. Use the ASCII "file separator" (0x1c) to separate the filename from
+    # the file mode in the output.
     sed -En '/^[dl-]/ {
-        s:^[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*:/:
-        /^\/\.$/ d
+        s:^([^[:space:]]*)[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*(.*$):\:\1/\2:
+        /\/\.$/ b
         s:([*?[]):\\\1:g
         p
     }'
@@ -315,38 +339,90 @@ function analyse {
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
       | scrub_rsync_list \
-      | sort > "$STATE_DIR/remote-tree-current" &
+      | sort -k 1.12 \
+      > "$STATE_DIR/remote-tree-current" &
     local remote_tree_pid=$!
   fi
 
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | scrub_rsync_list \
-      | sort > "$STATE_DIR/tree-current" \
+      | sort -k 1.12 \
+      > "$STATE_DIR/tree-current" \
       || die "SNAPSHOT"
 
   # Prevent bringing back locally deleted files
-  if [[ -s "$STATE_DIR/tree-prev" ]]; then
-    # Escape rsync filter wildcard characters, remove blank lines
-    comm -3 "$STATE_DIR/tree-prev" "$STATE_DIR/tree-current" \
-    | tee >(grep '^\S' > "$TMP_DIR/local-del") \
-    | sed -ne "s:^[[:space:]][^$]::p" > "$TMP_DIR/local-add"
-  else
-    # In the case of a new sync, where no previous tree snapshot is available,
-    # assume all the files on the local side should be protected
-    cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add"
-    touch "$TMP_DIR/local-del"
-  fi
+  if [[ -s "$STATE_DIR/tree-prev" ]]
+  then
+      # Compile a list of files added locally and removed locally. These
+      # should be protected in the pull phase. Escape rsync filter wildcard
+      # characters, remove blank lines
+      strip_mode < "$STATE_DIR/tree-prev" \
+      | comm -23 - <(strip_mode < "$STATE_DIR/tree-current") \
+      > "$TMP_DIR/local-del"
 
-  # Prevent deleting local files which were not deleted remotely
-  # ie. Prevent deleting newly added local files
-  touch "$TMP_DIR/remote-del"
-  if [[ -s "$STATE_DIR/tree-prev" ]]; then
-    wait $remote_tree_pid
-    comm -23 "$STATE_DIR/tree-prev" "$STATE_DIR/remote-tree-current" \
-    | grep -v '^[[:space:]]*$' \
-    > "$TMP_DIR/remote-del"
+      # Honor local mode changes (link to file, as well as permissions).
+      # These should be protected in the pull phase. Ignore files already
+      # masked as locally added or locally removed.
+      if [[ $STATE_VERSION -gt 1 ]]
+      then
+          # Use comm to detect the differences in the pseudo-sorted files
+          # (they're sorted on column 12). Comm will detect some false
+          # positives, so run the output back through `grep` to check if there
+          # is an exact match in the previous state file. This is much faster
+          # than resorting both of the files if they are somewhat large.
+          comm -23 "$STATE_DIR/tree-current" "$STATE_DIR/tree-prev" 2>/dev/null \
+          | while read -r line
+            do
+                if ! grep -Fxq "$line" "$STATE_DIR/tree-prev"
+                then
+                    echo "$line"
+                fi
+            done \
+          | strip_mode \
+          > "$TMP_DIR/local-add-change"
+      else
+          # In transition to the new state file, ignore the changes in mode
+          comm -23 <(strip_mode < "$STATE_DIR/tree-current") "$STATE_DIR/tree-prev" \
+          > "$TMP_DIR/local-add-change"
+      fi
+
+      # Also protect the folders where files were locally added and removed so
+      # that the modify times of them are not reverted to the remote ones
+      cat "$TMP_DIR/local-del" "$TMP_DIR/local-add-change" \
+      | while read -r line; do
+          # Only parent folders of files--not folders
+          if [[ "${line: -1}" != "/" ]]
+          then
+              echo "${line%/*}/"
+          fi
+        done \
+      | sort -u \
+      >> "$TMP_DIR/local-add-change"
+
+      # Prevent deleting local files which were not deleted remotely ie.
+      # prevent deleting newly added local files. Compile a list of remotely
+      # deleted files which should be protected in the push phase.
+      wait $remote_tree_pid
+      strip_mode < "$STATE_DIR/tree-prev" \
+      | comm -23 - <(strip_mode < "$STATE_DIR/remote-tree-current") \
+      > "$TMP_DIR/remote-del"
+  else
+      # In the case of a new sync, where no previous tree snapshot is available,
+      # assume all the files on the local side should be protected
+      cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add-change"
+      touch "$TMP_DIR/local-del"
+      touch "$TMP_DIR/remote-del"
   fi
+}
+
+function strip_mode {
+    if [[ $STATE_VERSION -gt 1 ]]; then
+        cut -c12-
+    else
+        # State file version might be intermixed. Evaluate each line
+        sed -E "s/^:.{10}//"
+    fi
 }
 
 # Do the actual synchronization
@@ -355,9 +431,11 @@ function sync {
   assert_mountpoints
   acquire_lock
   acquire_remote_lock
+  check_state_version
+  detect_fatfs
 
   echo
-  echo -e "${GREEN}bitpocket started${CLEAR} at `date`."
+  echo -e "${GREEN}bitpocket started${CLEAR} at $(date)."
   echo
 
   # Fire off slow sync start notifier in background
@@ -366,32 +444,34 @@ function sync {
   # Build addtion/deletion lists
   analyse
 
-  if [[ $OPTIONS =~ pretend ]]; then
+  if [[ "${OPTIONS[*]}" =~ pretend ]]; then
       RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
+      echo -e "${YELLOW}Pretending to sync only. No changes will be made${CLEAR}"
   fi
 
   pull
   push
 
-  if [[ ! $OPTIONS =~ pretend ]]; then
+  if [[ ! "${OPTIONS[*]}" =~ pretend ]]; then
       # Save after-sync state
 
       # Generate a incremental snapshot of the local tree including files deleted
       # and added via the pull()
-      sort "$TMP_DIR/tree-after" \
-      | comm -13 "$TMP_DIR/pull-delete" - \
-      | sed -e "s:^[[:space:]]*::" -e "s:/\$::" \
+      #
+      # Remove pull-deleted files from the tree-after snapshot
+      sort -k1.12 "$TMP_DIR/tree-after" \
+      | comm -23 - "$TMP_DIR/pull-delete" 2> /dev/null \
+      | sed -e "s:/\$::" \
       > "$STATE_DIR/tree-prev"
-
-      rm "$TMP_DIR/tree-after"
   fi
+  rm "$TMP_DIR/tree-after"
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop
 
   cleanup
   echo
-  echo -e "${GREEN}bitpocket finished${CLEAR} at `date`."
+  echo -e "${GREEN}bitpocket finished${CLEAR} at $(date)."
   echo
 
 }
@@ -401,7 +481,7 @@ function pack {
     assert_dotdir
 
     # Git is required for backup packing
-    if [ ! `builtin type -p git` ]; then
+    if ! builtin type -p git > /dev/null; then
         echo "fatal: For backup packing, git must be installed"
         exit 128
     fi
@@ -475,20 +555,26 @@ function cron {
 }
 
 function timestamp {
-  while read data
+  while read -r data
   do
       echo "[$(date +"%D %T")] $data"
   done
 }
 
 function acquire_lock {
-  if ! mkdir "$LOCK_DIR" 2>/dev/null ; then
-    kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
-
-    if [[ $? == 0 ]]; then
+  if ! mkdir "$LOCK_DIR" 2>/dev/null
+  then
+    if kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
+    then
       echo "There's already an instance of BitPocket syncing this directory. Exiting."
       exit 1
     else
+      if [[ "${OPTIONS[*]}" =~ force ]]
+      then
+        echo -e "${YELLOW}Removing stale, local lock file${CLEAR}"
+        rm "$LOCK_DIR/pid" && rmdir "$LOCK_DIR" && acquire_lock && return 0
+      fi
+
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
@@ -506,23 +592,78 @@ function release_lock {
 }
 
 function acquire_remote_lock {
-  start=$SECONDS
-  $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
-  while [[ $? != 0 ]]; do
-    duration=$(( $SECONDS - $start ))
-    if [ $duration -gt $LOCK_ACQUIRE_TIMEOUT ] || [ $LOCK_ACQUIRE_TIMEOUT -eq 0 ]; then
-      echo "Couldn't acquire remote lock. Another client is syncing with $REMOTE or lock file couldn't be created. Exiting."
+    # TODO: Place the local hostname and this PID in a file, which will make
+    # automatic lock file cleanup possible. It will also offer better output if
+    # another host is truly syncing with the remote host.
+    if [ -z "$1" ]; then
+      start=$SECONDS
+    else
+      start=$1
+    fi
+    if [ $(( $SECONDS - $start )) -gt $LOCK_ACQUIRE_TIMEOUT ] || [ $LOCK_ACQUIRE_TIMEOUT -eq 0 ]; then
+      echo "Could not acquire remote lock. Exiting."
       release_lock
       exit 3
-    else
-      sleep 5
-      $REMOTE_RUNNER "mkdir -p \"$REMOTE_TMP_DIR\"; cd \"$REMOTE_PATH\" && mkdir \"$LOCK_DIR\" 2>/dev/null"
     fi
-  done
+    local INFO="$HOSTNAME:$$:$TIMESTAMP"
+    local REMOTE_INFO=$($REMOTE_RUNNER "
+        mkdir -p '$REMOTE_TMP_DIR' && cd '$REMOTE_PATH'
+        [[ -d '$LOCK_DIR' ]] || mkdir '$LOCK_DIR'
+        [[ -e '$LOCK_DIR'/remote ]] || echo '$INFO' > '$LOCK_DIR'/remote
+        cat '$LOCK_DIR'/remote")
+
+    [[ "$INFO" == "$REMOTE_INFO" ]] && return 0
+
+    IFS=":" read -ra INFO <<< "$REMOTE_INFO"
+
+    # From here down, assume the lock could not be acquired
+    local code=3
+    if [[ -z $REMOTE_INFO ]]
+    then
+        echo "Couldn't acquire remote lock or lock file couldn't be created. Exiting."
+    elif [[ "$HOSTNAME" != "${INFO[0]}" ]]
+    then
+        if [ -z "$1" ]; then
+          echo -e "${YELLOW}Another client is syncing with '$REMOTE'${CLEAR}"
+          echo ">> Host:    ${INFO[0]}"
+          echo ">> PID:     ${INFO[1]}"
+          echo ">> Started: ${INFO[2]}"
+        fi
+        echo ">> Trying to acquire lock again in 20 seconds"
+        sleep 20 && acquire_remote_lock "$start" && return 0
+    elif [[ "$$" != "${INFO[1]}" ]]
+    then
+        # This host is syncing with the remote host. Check if the PID is still running
+        if kill -0 "${INFO[1]}" &>/dev/null
+        then
+            # XXX: This should be handled in the `acquire_lock` function
+            echo "Another instance of Bitpocket is currently syncing this" \
+                 "host with '$REMOTE'"
+            code=1
+        else
+            # In this case, this host is holding the lock with the remote server
+            # but the sync is no longer running. It is perhaps possible to remove
+            # the lock?
+            if [[ "${OPTIONS[*]}" =~ force ]]
+            then
+                echo -e "${YELLOW}Removing stale, remote lock file${CLEAR}"
+                $REMOTE_RUNNER "cd '$REMOTE_PATH' && rm '$LOCK_DIR/remote' && rmdir '$LOCK_DIR'"
+                # Try again
+                acquire_remote_lock && return 0
+            fi
+
+            echo "The remote lock is held by this host and is stale." \
+                 "It should be removed, and the sync should be retried."
+            code=6
+        fi
+    fi
+
+    release_lock
+    exit $code
 }
 
 function release_remote_lock {
-  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && rmdir \"$LOCK_DIR\" &>/dev/null"
+  $REMOTE_RUNNER "cd \"$REMOTE_PATH\" && grep -q '$HOSTNAME:$$' '$LOCK_DIR/remote' && rm '$LOCK_DIR/remote' && rmdir '$LOCK_DIR' &>/dev/null"
 }
 
 function assert_dotdir {
@@ -532,6 +673,30 @@ function assert_dotdir {
   fi
   mkdir -p "$TMP_DIR"
   mkdir -p "$STATE_DIR"
+}
+
+function detect_fatfs {
+    # Find the local mountpoint
+    if [[ $LOCAL_MOUNTPOINT == false ]]
+    then
+        if builtin type -p findmnt &> /dev/null
+        then
+            LOCAL_MOUNTPOINT=$(until findmnt . >/dev/null; do cd .. ; done && findmnt -no TARGET .)
+        else
+            LOCAL_MOUNTPOINT=$(until $(mount | grep -Ew "$(pwd -P)" >/dev/null); do cd .. ; done && pwd -P)
+        fi
+    fi
+
+    # Detect local mount is FAT and add appropriate
+    local fsinfo=($(mount | grep -Ew "${LOCAL_MOUNTPOINT}"))
+    local fstype=${fsinfo[4]}
+
+    if [[ $fstype == *fat ]]
+    then
+        RSYNC_OPTS="${RSYNC_OPTS} --no-perms --no-owner --no-group --modify-window=2"
+    fi
+
+    # TODO: Consider remote filesystem type?
 }
 
 function assert_mountpoints {
@@ -557,6 +722,22 @@ function cleanup {
   release_remote_lock
 }
 
+##
+# Inspect the state file tree-prev to see if the format of the file is the
+# current version (2) or the original version (1). This is used in the
+# `strip_mode` function to optimize the sync process when the `tree-prev` file
+# uses the current state version.
+function check_state_version() {
+    # In the original state files, the start of the line was the filename with
+    # a leading slash
+    if [[ -s "$STATE_DIR/tree-prev" ]]; then
+        local first=$(head -1 "$STATE_DIR/tree-prev" 2>/dev/null)
+        if [[ ${first:0:1} == "/" ]]; then
+            STATE_VERSION=1
+        fi
+    fi
+}
+
 function bring_the_children_let_me_kill_them {
   if [ -n "$shell_pid" ]; then
     pkill -P $shell_pid &>/dev/null
@@ -568,15 +749,22 @@ function die {
   cleanup
   bring_the_children_let_me_kill_them
 
-  echo "fatal: command failed $1"
+  echo -e "${RED}fatal${CLEAR}: command failed $1"
   exit 128
 }
+
+function intr_cleanup {
+  die "${YELLOW}Interrupted${CLEAR}"
+}
+
+trap intr_cleanup SIGINT
 
 # List all files in the sync set
 function list {
   echo -e "${GREEN}bitpocket${CLEAR} will sync the following files:"
   rsync -av --list-only --exclude "/$DOT_DIR"  $USER_RULES . \
       | scrub_rsync_list \
+      | strip_mode \
       | sort
 }
 
@@ -589,7 +777,7 @@ Available commands:
    sync    Run the sync process. If no command is specified, sync is run by
            default.
    init    Initialize a new bitpocket folder. Requires path and optional
-           remote hostparams.
+           remote host params. Remote path must already exist.
    pack    Pack any existing (automatic) backups into a git repository.
    cron    Run sync optimized for cron, logging output to file instead of
            stdout.
@@ -601,6 +789,7 @@ Available commands:
 Options:
    -p, --pretend                     Don't really perform the sync or update the current
                                      state. Instead, show what would be synchronized.
+   -f, --force                       Clean up stale lock files automatically
    -w=WAIT_TIME, --wait=WAIT_TIME    Number of seconds to wait when trying to acquire a
                                      lock on a remote host. This is useful if several
                                      are syncing at the same time.
@@ -615,29 +804,31 @@ function parseargs() {
         case $1 in
             # Switches and configuration
             -p|--pretend)   OPTIONS+=('pretend');;
-            -w=*|--wait=*)   LOCK_ACQUIRE_TIMEOUT="${1#*=}";;
+            -f|--force)     OPTIONS+=('force');;
+            -w=*|--wait=*)  LOCK_ACQUIRE_TIMEOUT="${1#*=}";;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
-            init)           if [[ $# < 2 ]]; then
+            init)           if [[ $# -lt 2 ]]; then
                                 echo "usage: bitpocket init [<REMOTE_HOST>] <REMOTE_PATH>"
                                 exit 128
                             fi
-                            COMMANDS+=($1)
+                            COMMANDS+=("$1")
                             ARGS+=("$2")
-                            if [[ $# > 2 ]]; then
+                            if [[ $# -gt 2 ]]; then
                                 ARGS+=("$3")
                                 shift;
                             fi
                             shift;;
-            sync|init|pack|cron|log|list|help)
-                            COMMANDS+=($1);;
+            sync|pack|cron|log|list|help)
+                            COMMANDS+=("$1");;
+            # Anything else
             *)              echo "!!! Invalid command: $1";;
         esac
         shift
     done
 }
 
-parseargs $*
+parseargs "$@"
 
 # By default, run the sync process
 [[ ${#COMMANDS} == 0 ]] && COMMANDS+=('sync')

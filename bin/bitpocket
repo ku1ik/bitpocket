@@ -13,6 +13,7 @@ CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+PARTIAL_DIR="$DOT_DIR/staging"
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -22,6 +23,7 @@ REMOTE_BACKUPS=false
 BACKUPS=true
 LOCAL_MOUNTPOINT=false
 REMOTE_MOUNTPOINT=false
+TRANSACTIONAL=true
 
 # Default command-line options and such
 COMMANDS=()
@@ -127,6 +129,8 @@ function init {
     exit 128
   fi
 
+  REMOTE_PATH="$($REMOTE_RUNNER "cd '$REMOTE_PATH'; pwd -P")"
+
   mkdir "$DOT_DIR"
 
   cat <<EOF > "$CFG_FILE"
@@ -162,6 +166,11 @@ REMOTE_BACKUPS=false
 ## result in all local or remote data disappearing. Give the expected
 ## mountpoint of the local and/or remote target.
 # REMOTE_MOUNTPOINT=/
+
+## Perform the transfer as a transaction. If interrupted, no updates are made.
+# Partial file transfers remain to speed up future syncs. This should be
+# combined with the "clean" command to automatically clean up ab
+# TRANSACTIONAL=true
 EOF
 
   echo "Initialized bitpocket directory at $(pwd)"
@@ -189,11 +198,18 @@ function pull() {
 
   local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
   local DO_BACKUP=""
+  local DO_TRANSACTION=""
 
   if [[ $BACKUPS == true ]]
   then
       echo "# >> Saving current state and backing up files (if needed)"
       local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+  fi
+
+  if [[ $TRANSACTIONAL == true ]]
+  then
+      echo "# >> Syncing as a transaction"
+      DO_TRANSACTION="--partial --temp-dir=$PARTIAL_DIR --delay-updates --delete-delay"
   fi
 
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
@@ -215,7 +231,7 @@ function pull() {
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
         --filter="P **" \
-        $DO_BACKUP \
+        $DO_BACKUP $DO_TRANSACTION \
         --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
@@ -271,10 +287,23 @@ function push() {
 
   local BACKUP_TARGET="$DOT_DIR/backups/$TIMESTAMP"
   local DO_BACKUP=""
+  local DO_TRANSACTION=""
+
   if [[ $REMOTE_BACKUPS == true ]]
   then
       echo "# >> Saving current state and backing up files (if needed)"
       DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
+  fi
+
+  if [[ $TRANSACTIONAL == true ]]
+  then
+      echo "# >> Syncing as a transaction"
+      $REMOTE_RUNNER "
+          cd '$REMOTE_PATH'
+          [[ -d '$PARTIAL_DIR' ]] || mkdir -p '$PARTIAL_DIR'
+          chmod 0700 '$PARTIAL_DIR' \
+              || die 'Cannot set proper permissions on PARTIAL_DIR'"
+      DO_TRANSACTION="--partial --temp-dir=$PARTIAL_DIR --delay-updates --delete-delay"
   fi
 
   # Do not push back remotely deleted files
@@ -283,7 +312,7 @@ function push() {
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
-        $DO_BACKUP \
+        $DO_BACKUP $DO_TRANSACTION \
         $USER_RULES . $REMOTE/ \
   | prefix "  | " || die "PUSH"
 
@@ -655,6 +684,14 @@ function assert_dotdir {
   fi
   mkdir -p "$TMP_DIR"
   mkdir -p "$STATE_DIR"
+
+  if [[ $TRANSACTIONAL ]]
+  then
+    [[ -d "$PARTIAL_DIR" ]] || mkdir -p "$PARTIAL_DIR"
+    chmod 0700 "$PARTIAL_DIR" \
+      || die "Cannot set proper permissions on PARTIAL_DIR"
+  fi
+
 }
 
 function detect_fatfs {

@@ -219,7 +219,11 @@ function pull() {
         --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
-  | prefix "  | " || die "PULL"
+  | prefix "  | "
+
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PULL was interrupted"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -285,7 +289,11 @@ function push() {
         --filter="P **" \
         $DO_BACKUP \
         $USER_RULES . $REMOTE/ \
-  | prefix "  | " || die "PUSH"
+  | prefix "  | "
+
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PUSH was interrupted"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups

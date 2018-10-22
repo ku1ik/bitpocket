@@ -13,7 +13,6 @@ CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
-PARTIAL_DIR="$(pwd)/$DOT_DIR/partials"
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -168,7 +167,6 @@ REMOTE_BACKUPS=false
 ## mountpoint of the local and/or remote target.
 # REMOTE_MOUNTPOINT=/
 EOF
-  mkdir -m 700 "$PARTIAL_DIR" #Force create the partials dir with correct permissions
   echo "Initialized bitpocket directory at $(pwd)"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
@@ -203,9 +201,6 @@ function pull() {
 
   cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
 
-  # Ensure the partial directory has the correct permissions
-  ensure_correct_partial_dir
-
   # Determine what will be fetched from server and make backup copies of any
   # local files to be deleted or overwritten.
   #
@@ -218,7 +213,7 @@ function pull() {
   # TODO: Consider adding %U and %G to the output format to capture owner and
   # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzxi --delete --partial-dir="$PARTIAL_DIR" --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
@@ -270,23 +265,6 @@ function detect_changes() {
     done
 
     exec 3>&-
-}
-
-function ensure_correct_partial_dir() {
-  if [ ! -d "$PARTIAL_DIR" ]; then
-    mkdir -m 700 "$PARTIAL_DIR"
-  fi
-  if [ $(stat -c '%U' "$PARTIAL_DIR") != $(whoami) ]; then
-    echo "File does not belong to current user, cannot continue!"
-    die "PARTIAL DIR CHECK"
-  fi
-  if [ $(stat -c "%a" "$PARTIAL_DIR") != "700" ]; then
-    echo "IMPORTANT: the --partial-dir should not be writable by other users or it is a security risk."
-    chmod 700 "$PARTIAL_DIR"
-  fi
-  if [[ $? != 0 ]]; then
-    die "PARTIAL DIR CHECK"
-  fi
 }
 
 function push() {

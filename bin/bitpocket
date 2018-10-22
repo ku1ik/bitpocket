@@ -223,7 +223,6 @@ function pull() {
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
         --filter="P **" \
-        --delay-updates \
         $DO_BACKUP \
         --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \

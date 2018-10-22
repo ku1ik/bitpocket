@@ -253,6 +253,15 @@ your _.bitpocket/config_ file:
 
     # REMOTE_MOUNTPOINT=/
 
+Changes received in the pull and sent in the push phase are grouped as part of
+a transaction. That is, the changes are placed in a staging area until the
+completion of the phase and then moved into place. This has the effect of
+maintaining consistency of the files across intermittent network connections.
+This is enabled by default, but requires some overhead of extra space on both
+the souce and destination systems to allow for the staging of all the changes.
+
+    # TRANSACTIONAL=true
+
 ## Author
 
 * Marcin Kulik | @sickill | https://github.com/sickill | http://ku1ik.com/

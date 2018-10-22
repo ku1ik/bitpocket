@@ -22,6 +22,7 @@ REMOTE_BACKUPS=false
 BACKUPS=true
 LOCAL_MOUNTPOINT=false
 REMOTE_MOUNTPOINT=false
+LOCK_ACQUIRE_TIMEOUT=60
 
 # Default command-line options and such
 COMMANDS=()
@@ -144,6 +145,9 @@ REMOTE_BACKUPS=false
 ## SSH command with options for connecting to \$REMOTE
 # RSYNC_RSH="ssh -p 22 -i $DOT_DIR/id_rsa"
 
+## By default, the program will wait for 60 seconds to acquire a lock on the remote host (in case other clients are currently syncing). Change this value to the desired timeout value in seconds 0 to disable the wait time.
+# LOCK_ACQUIRE_TIMEOUT=60
+
 ## Uncomment following line to follow symlinks (transform it into referent file/dir)
 # RSYNC_OPTS="-L"
 
@@ -163,7 +167,6 @@ REMOTE_BACKUPS=false
 ## mountpoint of the local and/or remote target.
 # REMOTE_MOUNTPOINT=/
 EOF
-
   echo "Initialized bitpocket directory at $(pwd)"
   echo "Please have a look at the config file ($DOT_DIR/config)"
 }
@@ -210,7 +213,7 @@ function pull() {
   # TODO: Consider adding %U and %G to the output format to capture owner and
   # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzx --delete --exclude "/$DOT_DIR" \
+  | rsync -auzxi --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
@@ -219,7 +222,10 @@ function pull() {
         --out-format=%i:%B:%n \
         $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | detect_changes \
-  | prefix "  | " || die "PULL"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PULL"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -285,7 +291,10 @@ function push() {
         --filter="P **" \
         $DO_BACKUP \
         $USER_RULES . $REMOTE/ \
-  | prefix "  | " || die "PUSH"
+  | prefix "  | "
+  if [[ ${PIPESTATUS[1]} != 0 ]]; then
+    die "PUSH"
+  fi
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
   # populated with any backups
@@ -344,8 +353,10 @@ function analyse {
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
       | scrub_rsync_list \
       | sort -k 1.12 \
-      > "$STATE_DIR/tree-current" \
-      || die "SNAPSHOT"
+      > "$STATE_DIR/tree-current"
+      if [[ ${PIPESTATUS[0]} != 0 ]]; then
+        die "SNAPSHOT"
+      fi
 
   # Prevent bringing back locally deleted files
   if [[ -s "$STATE_DIR/tree-prev" ]]
@@ -574,7 +585,7 @@ function acquire_lock {
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
-      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
+      echo "  | Command:  LOCK_PATH=$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
       echo "Please remove the lock directory and try again."
       exit 2
     fi
@@ -591,6 +602,16 @@ function acquire_remote_lock {
     # TODO: Place the local hostname and this PID in a file, which will make
     # automatic lock file cleanup possible. It will also offer better output if
     # another host is truly syncing with the remote host.
+    if [ -z "$1" ]; then
+      start=$SECONDS
+    else
+      start=$1
+    fi
+    if [ $(( $SECONDS - $start )) -gt $LOCK_ACQUIRE_TIMEOUT ] || [ $LOCK_ACQUIRE_TIMEOUT -eq 0 ]; then
+      echo "Could not acquire remote lock. Exiting."
+      release_lock
+      exit 3
+    fi
     local INFO="$HOSTNAME:$$:$TIMESTAMP"
     local REMOTE_INFO=$($REMOTE_RUNNER "
         mkdir -p '$REMOTE_TMP_DIR' && cd '$REMOTE_PATH'
@@ -609,10 +630,14 @@ function acquire_remote_lock {
         echo "Couldn't acquire remote lock or lock file couldn't be created. Exiting."
     elif [[ "$HOSTNAME" != "${INFO[0]}" ]]
     then
-        echo -e "${YELLOW}Another client is syncing with '$REMOTE'${CLEAR}"
-        echo ">> Host:    ${INFO[0]}"
-        echo ">> PID:     ${INFO[1]}"
-        echo ">> Started: ${INFO[2]}"
+        if [ -z "$1" ]; then
+          echo -e "${YELLOW}Another client is syncing with '$REMOTE'${CLEAR}"
+          echo ">> Host:    ${INFO[0]}"
+          echo ">> PID:     ${INFO[1]}"
+          echo ">> Started: ${INFO[2]}"
+        fi
+        echo ">> Trying to acquire lock again in 20 seconds"
+        sleep 20 && acquire_remote_lock "$start" && return 0
     elif [[ "$$" != "${INFO[1]}" ]]
     then
         # This host is syncing with the remote host. Check if the PID is still running
@@ -751,7 +776,7 @@ function list {
 }
 
 function usage {
-  cat <<EOF  
+  cat <<EOF
 usage:  bitpocket { init [<REMOTE_HOST>] <REMOTE_PATH>
                   | sync | help | pack | log | cron | list }
 
@@ -769,9 +794,12 @@ Available commands:
    help    Show this message.
 
 Options:
-   -f, --force      Clean up stale lock files automatically
-   -p, --pretend    Don't really perform the sync or update the current
-                    state. Instead, show what would be synchronized.
+   -p, --pretend                     Don't really perform the sync or update the current
+                                     state. Instead, show what would be synchronized.
+   -f, --force                       Clean up stale lock files automatically
+   -w=WAIT_TIME, --wait=WAIT_TIME    Number of seconds to wait when trying to acquire a
+                                     lock on a remote host. This is useful if several
+                                     are syncing at the same time.
 
 Note: All commands (apart from help), must be run in the root of a
       new or existing bitpocket directory structure.
@@ -784,6 +812,7 @@ function parseargs() {
             # Switches and configuration
             -p|--pretend)   OPTIONS+=('pretend');;
             -f|--force)     OPTIONS+=('force');;
+            -w=*|--wait=*)  LOCK_ACQUIRE_TIMEOUT="${1#*=}";;
             -h|--help|-*)   COMMANDS+=('help');;
             # Arguments (commands)
             init)           if [[ $# -lt 2 ]]; then

@@ -341,10 +341,13 @@ function analyse {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
-      | scrub_rsync_list \
-      | sort -k 1.12 \
-      > "$STATE_DIR/remote-tree-current" &
+    (
+      rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+        | scrub_rsync_list \
+        | sort -k 1.12 \
+        > "$STATE_DIR/remote-tree-current"
+      exit ${PIPESTATUS[0]}
+    ) &
     local remote_tree_pid=$!
   fi
 
@@ -407,7 +410,9 @@ function analyse {
       # Prevent deleting local files which were not deleted remotely ie.
       # prevent deleting newly added local files. Compile a list of remotely
       # deleted files which should be protected in the push phase.
-      wait $remote_tree_pid
+      wait $remote_tree_pid \
+      || die "Remote change detection failed"
+
       strip_mode < "$STATE_DIR/tree-prev" \
       | comm -23 - <(strip_mode < "$STATE_DIR/remote-tree-current") \
       > "$TMP_DIR/remote-del"

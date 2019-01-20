@@ -221,6 +221,11 @@ function init {
 REMOTE_HOST=$REMOTE_HOST
 REMOTE_PATH="$REMOTE_PATH"
 RSYNC_SSH_OPTIONS="$RSYNC_SSH_OPTIONS"
+#set a timeout after which remote locks are ignored (only with NO_SSH=true)
+REMOTE_LOCK_TIMEOUT="$REMOTE_LOCK_TIMEOUT"
+#set a time to wait for acquiring a remote lock (only with NO_SSH=true)
+REMOTE_LOCK_WAIT="$REMOTE_LOCK_WAIT"
+#avoid any direct ssh commands, always use rsync
 NO_SSH="$NO_SSH"
 
 ## Backups -----------------------------------
@@ -714,9 +719,9 @@ function acquire_remote_lock_rsync {
     local INFO="$HOSTNAME:$$:$LOCK_TIMESTAMP"
     if [ -d $REMOTE_LOCK_DIR ] ; then
         rm -rf $REMOTE_LOCK_DIR
-        mkdir -p $REMOTE_LOCK_DIR
-        touch $REMOTE_LOCK_DIR/$INFO
     fi    
+    mkdir -p $REMOTE_LOCK_DIR    
+    touch $REMOTE_LOCK_DIR/$INFO
     #write our lockfile to remote
     echo "#creating remote lock $REMOTE_LOCK_DIR/$INFO"
     rsync  -e "$RSYNC_SSH_OPTIONS" $RSYNC_OPTS -ra  --filter="+ $DOT_DIR" --filter="+ $REMOTE_LOCK_DIR" --filter="+ $REMOTE_LOCK_DIR/$INFO" --filter="- *" ./ $REMOTE/
@@ -727,12 +732,12 @@ function acquire_remote_lock_rsync {
     if [ "$rstate" -ne 1 ] ; then
         die "unable to acquire remote lock"
     fi
-    local wait_time=0
-    while [ $wait_time -lt "$REMOTE_LOCK_WAIT" ] 
+    local wait_time=$REMOTE_LOCK_WAIT
+    while [ $wait_time -gt 0 ] 
     do
         local other_hosts=`cat "$REMOTE_STATE" | grep -v "^$HOSTNAME:"`
         if [ "$other_hosts" != "" ] ; then
-            echo "other hosts having locks: $other_hosts"
+            echo "#other hosts having locks: $other_hosts"
         else    
             local pids_same_host=`cat "$REMOTE_STATE" | grep -v "$INFO" | sed -n "s?^$HOSTNAME:??p" | sed 's/:.*//'`
             if [ "$pids_same_host" != "" ] ; then
@@ -753,8 +758,8 @@ function acquire_remote_lock_rsync {
             fi
         fi    
         sleep 1
-        let "wait_time=$wait_time+1"
-        echo "waiting for remote lock"
+        let "wait_time=$wait_time-1"
+        echo "#waiting for remote lock for $wait_time seconds"
         read_remote_locks "$INFO"
         rstate=$?
         [ $rstate = 0 ] && return 0

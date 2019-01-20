@@ -20,6 +20,7 @@ LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash 
 SLOW_SYNC_TIME=10
 SLOW_SYNC_FILE="$TMP_DIR/slow"
 RSYNC_RSH="ssh"
+[ "$RSYNC_SSH_OPTIONS" = "" ] && RSYNC_SSH_OPTIONS="ssh"
 REMOTE_BACKUPS=false
 BACKUPS=true
 LOCAL_MOUNTPOINT=false
@@ -203,6 +204,7 @@ function init {
 ## Host and path of central storage
 REMOTE_HOST=$REMOTE_HOST
 REMOTE_PATH="$REMOTE_PATH"
+RSYNC_SSH_OPTIONS="$RSYNC_SSH_OPTIONS"
 
 ## Backups -----------------------------------
 ## Enable file revisioning locally in the pull phase (>false< to disable)
@@ -280,7 +282,7 @@ function pull() {
   # TODO: Consider adding %U and %G to the output format to capture owner and
   # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -e "ssh -o stricthostkeychecking=no" -auzx --delete --exclude "/$DOT_DIR" \
+  | rsync -e "$RSYNC_SSH_OPTIONS" -auzx --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
@@ -349,7 +351,7 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -e "ssh -o stricthostkeychecking=no" -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -e "$RSYNC_SSH_OPTIONS" -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
@@ -403,7 +405,7 @@ function analyse {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync -e "ssh -o stricthostkeychecking=no" $RSYNC_OPTS --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+    rsync -e "$RSYNC_SSH_OPTIONS" $RSYNC_OPTS --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/remote-tree-current" &

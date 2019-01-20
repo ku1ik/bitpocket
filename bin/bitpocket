@@ -1,4 +1,5 @@
 #!/bin/bash
+#set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -122,10 +123,10 @@ function init {
 
   REMOTE_PATH="$1"
   setup_remote
-  if $REMOTE_RUNNER "[ ! -d '$1' ]"; then
-    echo "fatal: '$REMOTE': Remote path is not accessible"
-    exit 128
-  fi
+  #if $REMOTE_RUNNER "[ ! -d '$1' ]"; then
+  #  echo "fatal: '$REMOTE': Remote path is not accessible"
+  #  exit 128
+  #fi
 
   mkdir "$DOT_DIR"
 
@@ -210,7 +211,7 @@ function pull() {
   # TODO: Consider adding %U and %G to the output format to capture owner and
   # group changes
   prefix "R " < "$TMP_DIR/remote-del" \
-  | rsync -auzx --delete --exclude "/$DOT_DIR" \
+  | rsync -e "ssh -o stricthostkeychecking=no" -auzx --delete --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/local-del" \
         --exclude-from="$TMP_DIR/local-add-change" \
         --filter=". -" \
@@ -279,7 +280,7 @@ function push() {
 
   # Do not push back remotely deleted files
   prefix "R " < "$TMP_DIR/local-del" \
-  | rsync -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
+  | rsync -e "ssh -o stricthostkeychecking=no" -auzxi --delete $RSYNC_OPTS --exclude "/$DOT_DIR" \
         --exclude-from="$TMP_DIR/remote-del" \
         --filter=". -" \
         --filter="P **" \
@@ -333,7 +334,7 @@ function analyse {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+    rsync -e "ssh -o stricthostkeychecking=no" $RSYNC_OPTS --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/remote-tree-current" &
@@ -426,7 +427,7 @@ function sync {
   assert_dotdir
   assert_mountpoints
   acquire_lock
-  acquire_remote_lock
+  #acquire_remote_lock
   check_state_version
   detect_fatfs
 
@@ -701,7 +702,7 @@ function assert_mountpoints {
 
 function cleanup {
   release_lock
-  release_remote_lock
+  #release_remote_lock
 }
 
 ##

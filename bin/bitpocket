@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then

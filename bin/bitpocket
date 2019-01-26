@@ -1,5 +1,5 @@
 #!/bin/bash
-#set -x
+set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -467,7 +467,9 @@ function analyse {
           # positives, so run the output back through `grep` to check if there
           # is an exact match in the previous state file. This is much faster
           # than resorting both of the files if they are somewhat large.
-          comm -23 "$STATE_DIR/tree-current" "$STATE_DIR/tree-prev" 2>/dev/null \
+          sort  "$STATE_DIR/tree-current" >  "$STATE_DIR/tree-current.sort" || die "unable to sort tree-current"
+          sort  "$STATE_DIR/tree-prev" >  "$STATE_DIR/tree-prev.sort" || die "unable to sort tree-prev"
+          comm -23 "$STATE_DIR/tree-current.sort" "$STATE_DIR/tree-prev.sort" 2>/dev/null \
           | while read -r line
             do
                 if ! grep -Fxq "$line" "$STATE_DIR/tree-prev"
@@ -506,7 +508,7 @@ function analyse {
   else
       # In the case of a new sync, where no previous tree snapshot is available,
       # assume all the files on the local side should be protected
-      cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add-change"
+      cat "$STATE_DIR/tree-current" | strip_mode > "$TMP_DIR/local-add-change"
       touch "$TMP_DIR/local-del"
       touch "$TMP_DIR/remote-del"
   fi
@@ -694,15 +696,6 @@ function acquire_lock {
 
 function release_lock {
   rm -f "$LOCK_DIR/pid" &>/dev/null 
-}
-function filter_outdated(){
-    while read -r line
-    do
-        IFS=":" read -ra info <<< "$line"
-        if [ "${info[2]}" -gt "$1" ] ; then
-            echo "$line"
-        fi    
-    done
 }
 #read the remote locks
 #return locks in the variable REMOTE_STATE

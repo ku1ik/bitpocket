@@ -421,9 +421,6 @@ function scrub_rsync_list {
 
 function analyse {
   # Check what has changed
-  touch "$STATE_DIR/tree-prev"
-
-  # Save before-sync state
   # Must be done with rsync itself (rather than find) to respect includes/excludes
   # Order of includes/excludes/filters is EXTREMELY important
   echo "# Capturing current local and remote state"
@@ -458,45 +455,12 @@ function analyse {
       > "$TMP_DIR/local-del"
 
       # Honor local mode changes (link to file, as well as permissions).
-      # These should be protected in the pull phase. Ignore files already
-      # masked as locally added or locally removed.
-      if [[ $STATE_VERSION -gt 1 ]]
-      then
-          # Use comm to detect the differences in the pseudo-sorted files
-          # (they're sorted on column 12). Comm will detect some false
-          # positives, so run the output back through `grep` to check if there
-          # is an exact match in the previous state file. This is much faster
-          # than resorting both of the files if they are somewhat large.
-          sort  "$STATE_DIR/tree-current" >  "$STATE_DIR/tree-current.sort" || die "unable to sort tree-current"
-          sort  "$STATE_DIR/tree-prev" >  "$STATE_DIR/tree-prev.sort" || die "unable to sort tree-prev"
-          comm -23 "$STATE_DIR/tree-current.sort" "$STATE_DIR/tree-prev.sort" 2>/dev/null \
-          | while read -r line
-            do
-                if ! grep -Fxq "$line" "$STATE_DIR/tree-prev"
-                then
-                    echo "$line"
-                fi
-            done \
-          | strip_mode \
-          > "$TMP_DIR/local-add-change"
-      else
-          # In transition to the new state file, ignore the changes in mode
-          comm -23 <(strip_mode < "$STATE_DIR/tree-current") "$STATE_DIR/tree-prev" \
-          > "$TMP_DIR/local-add-change"
-      fi
-
-      # Also protect the folders where files were locally added and removed so
-      # that the modify times of them are not reverted to the remote ones
-      cat "$TMP_DIR/local-del" "$TMP_DIR/local-add-change" \
-      | while read -r line; do
-          # Only parent folders of files--not folders
-          if [[ "${line: -1}" != "/" ]]
-          then
-              echo "${line%/*}/"
-          fi
-        done \
-      | sort -u \
-      >> "$TMP_DIR/local-add-change"
+      # we simply find all files that have been changed after the last check
+      # this leaves a smal gap: files that potentially have been changed remotely during the sync
+      # or if the remote ts does not really fit ours
+      # but if we run the sync repeatedly, this should be fixed with the next run
+      # These should be protected in the pull phase. 
+      find . -type f -newer "$STATE_DIR/tree-prev" | sed 's?^\.??' | grep -v "^/$DOT_DIR" > "$TMP_DIR/local-add-change"
 
       # Prevent deleting local files which were not deleted remotely ie.
       # prevent deleting newly added local files. Compile a list of remotely

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -809,7 +809,8 @@ function acquire_remote_lock_rsync {
     done    
     local code=3
     echo -e "${YELLOW}Another client is syncing with '$REMOTE'${CLEAR}"
-    cat $REMOTE_STATE | grep -v "$INFO"
+    printf "%s\n" "${REMOTE_OTHER[@]}"
+    printf "%s\n" "${LOCAL_OTHER[@]}"
     cleanup
     exit $code
 }

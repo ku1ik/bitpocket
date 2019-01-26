@@ -1,5 +1,5 @@
 #!/bin/bash
-#set -x
+set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -109,6 +109,9 @@ parseargs "$@"
 # Load config file
 [[ -f "$CFG_FILE" ]] && . "$CFG_FILE"
 
+if [ "$REMOVE_STALE_LOCKS" = "true" ] ; then
+    OPTIONS+=("force")
+fi
 # Colors
 GREEN=""
 RED=""
@@ -227,6 +230,9 @@ REMOTE_LOCK_TIMEOUT="$REMOTE_LOCK_TIMEOUT"
 REMOTE_LOCK_WAIT="$REMOTE_LOCK_WAIT"
 #avoid any direct ssh commands, always use rsync
 NO_SSH="$NO_SSH"
+
+#always remove stale local locks (default: false)
+#REMOVE_STALE_LOCKS=true
 
 ## Backups -----------------------------------
 ## Enable file revisioning locally in the pull phase (>false< to disable)
@@ -656,7 +662,12 @@ function timestamp {
 }
 
 function acquire_lock {
-  if ! mkdir "$LOCK_DIR" 2>/dev/null
+  [ ! -d "$LOCK_DIR" ] && mkdir -p "$LOCK_DIR"
+  if [ ! -d "$LOCK_DIR" ]; then
+      echo -e "${RED}bitpocket error:${CLEAR} unable to create lock dir $LOCK_DIR"
+      exit 2
+  fi
+  if [ -f "$LOCK_DIR/pid" ]
   then
     if kill -0 $(cat "$LOCK_DIR/pid") &>/dev/null
     then
@@ -666,14 +677,14 @@ function acquire_lock {
       if [[ "${OPTIONS[*]}" =~ force ]]
       then
         echo -e "${YELLOW}Removing stale, local lock file${CLEAR}"
-        rm "$LOCK_DIR/pid" && rmdir "$LOCK_DIR" && acquire_lock && return 0
+        rm -f "$LOCK_DIR/pid" && acquire_lock && return 0
       fi
 
       echo -e "${RED}bitpocket error:${CLEAR} Bitpocket found a stale lock directory:"
       echo "  | Root dir: $(pwd)"
       echo "  | Lock dir: $LOCK_DIR"
-      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid && rmdir \$LOCK_PATH"
-      echo "Please remove the lock directory and try again."
+      echo "  | Command:  LOCK_PATH=$(pwd)/$LOCK_DIR && rm \$LOCK_PATH/pid "
+      echo "Please remove the lock file and try again."
       exit 2
     fi
   fi
@@ -682,7 +693,7 @@ function acquire_lock {
 }
 
 function release_lock {
-  rm "$LOCK_DIR/pid" &>/dev/null && rmdir "$LOCK_DIR" &>/dev/null
+  rm -f "$LOCK_DIR/pid" &>/dev/null 
 }
 function filter_outdated(){
     while read -r line

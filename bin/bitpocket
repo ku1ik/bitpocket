@@ -150,16 +150,6 @@ function setup_remote() {
 }
 setup_remote
 
-# Version of the state files. Original version is 1, second version with
-# leading mode is 2.
-#
-# Current state version is 2, and the format of the state file is
-# ":" TYPE MODE "/" PATH "\n"
-# Where TYPE = ("-" | "d" | "l" )
-#       MODE = unix mode (9-character) (like "rw-rw-r--")
-#       PATH = relative full-path of file
-STATE_VERSION=2
-
 REMOTE_TMP_DIR="$REMOTE_PATH/$DOT_DIR/tmp"
 HOSTNAME="$(hostname)"
 
@@ -315,8 +305,11 @@ function pull() {
       then
           echo "  | Some files were backed up to $BACKUP_TARGET"
       else
+          echo "  | No files were backed up to $BACKUP_TARGET, cleaning up"
           rmdir "$BACKUP_TARGET"
       fi
+  else    
+    echo "  | No files were backed up to $BACKUP_TARGET, cleaning up"
   fi
 }
 
@@ -419,7 +412,7 @@ function analyse {
   find . | sort > "$STATE_DIR/tree-current"
   if [ -e "$STATE_DIR/last-sync" -a -s "$STATE_DIR/tree-last" ]; then
     find . -newer "$STATE_DIR/last-sync" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
-    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | find_to_filter '-' > $TMP_DIR/local-del || die "unable to create local-del"
+    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | find_to_filter '-' > "$TMP_DIR/local-del" || die "unable to create local-del"
   else
     echo "" > "$TMP_DIR/local-del" || die "unable to create local-del"
     cat "$STATE_DIR/tree-current" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
@@ -427,12 +420,7 @@ function analyse {
 }
 
 function strip_mode {
-    if [[ $STATE_VERSION -gt 1 ]]; then
-        cut -c12-
-    else
-        # State file version might be intermixed. Evaluate each line
-        sed -E "s/^:.{10}//"
-    fi
+      cut -c12-
 }
 
 # Do the actual synchronization
@@ -441,7 +429,6 @@ function sync {
   acquire_lock
   acquire_remote_lock_rsync
   create_sync_start
-  check_state_version
   detect_fatfs
 
   echo
@@ -597,7 +584,6 @@ function release_lock {
 #outdated in REMOTE_OUTDATED, other in REMOTE_OTHER, other from same host in LOCAL_OTHER
 #return 0 if our own only or our is oldest, 1 if other, -1 if own not there or other error
 #p1 our own lock file name
-#TODO: handle timeouts for locks
 function read_remote_locks() {
     local old_ts=$(date "+%s")
     let "old_ts=$old_ts-$REMOTE_LOCK_TIMEOUT"
@@ -751,22 +737,6 @@ function detect_fatfs {
 function cleanup {
   release_lock
   release_remote_lock_rsync
-}
-
-##
-# Inspect the state file tree-prev to see if the format of the file is the
-# current version (2) or the original version (1). This is used in the
-# `strip_mode` function to optimize the sync process when the `tree-prev` file
-# uses the current state version.
-function check_state_version() {
-    # In the original state files, the start of the line was the filename with
-    # a leading slash
-    if [[ -s "$STATE_DIR/tree-prev" ]]; then
-        local first=$(head -1 "$STATE_DIR/tree-prev" 2>/dev/null)
-        if [[ ${first:0:1} == "/" ]]; then
-            STATE_VERSION=1
-        fi
-    fi
 }
 
 function bring_the_children_let_me_kill_them {

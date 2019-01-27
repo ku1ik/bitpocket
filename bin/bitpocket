@@ -385,6 +385,11 @@ function scrub_rsync_list {
     }'
 }
 
+#omit the leading . and escape wildcards in filenames
+function find_to_filter {
+  sed -n "s?^\.\([^ ][^ ]*\)?$1 \1?p"| sed 's:\([*?[]\):\\\1:g'
+}
+
 function create_sync_start {
   touch "$STATE_DIR/new-sync"
 }
@@ -413,11 +418,11 @@ function analyse {
   # Collect the current snapshot of the local tree
   find . | sort > "$STATE_DIR/tree-current"
   if [ -e "$STATE_DIR/last-sync" -a -s "$STATE_DIR/tree-last" ]; then
-    find . -newer "$STATE_DIR/last-sync" | sed -n 's?^\.\([^ ][^ ]*\)?P \1?p' > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
-    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" |sed -n 's?^\.\([^ ][^ ]*\)?- \1?p'> $TMP_DIR/local-del || die "unable to create local-del"
+    find . -newer "$STATE_DIR/last-sync" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
+    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | find_to_filter '-' > $TMP_DIR/local-del || die "unable to create local-del"
   else
     echo "" > "$TMP_DIR/local-del" || die "unable to create local-del"
-    cp "$STATE_DIR/tree-current" "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
+    cat "$STATE_DIR/tree-current" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
   fi  
 }
 

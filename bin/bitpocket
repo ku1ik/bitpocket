@@ -6,7 +6,7 @@
 # simplified by omiting the approach to preserve directory timestamps
 # and fully relying on rsync - no ssh to remote systems
 #
-set -x
+#set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -397,6 +397,16 @@ function finish_sync {
 
 function analyse {
   # Check what has changed
+  # simpliefied approach:
+  # check for local changes after the last sync start (mtime against last-sync) -> local-add-change, preserve them from deletes
+  # check for local deletes (compare tree-last with tree-current) -> local-del and omit them completely from the pull
+  # remaining issues:
+  # (1) if a remote file gets changed during the sync it will be stored with a mtime > last-sync
+  #     this will prevent it from being deleted on the next sync if afterwards it would be deleted remotely (and this way will be transferred back)
+  #     maybe acceptable as it would only affect deletes (i.e. file would come back)
+  # (2) we completely rely on rsync checking the timestamps - this could cause trouble if local and remote time stamps differ
+  # (3) a file is locally changed/deleted when the sync is running - we don't know which one will finally win - but this problem is always there
+  # all of the problems will finally create backups on bot sides
   echo "# Capturing current local state "
   echo "  | Root dir: $(pwd)"
 

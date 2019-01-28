@@ -50,7 +50,7 @@ usage:  bitpocket { init [<REMOTE_HOST>] <REMOTE_PATH>
 Available commands:
    sync    Run the sync process. If no command is specified, sync is run by
            default.
-   resync  merge remote and local
+   resync  merge remote and local (like initial sync)
            will not delete any local files
            always necessary if includes/excludes changed
    init    Initialize a new bitpocket folder. Requires path and optional
@@ -419,7 +419,7 @@ function analyse {
     find . -newer "$STATE_DIR/last-sync" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
     [ ! -f "$STATE_DIR/pull-current" ] && touch "$STATE_DIR/pull-current"
     [ ! -f "$STATE_DIR/pull-last" ] && touch "$STATE_DIR/pull-last"
-    cat "$STATE_DIR/pull-current" "$STATE_DIR/pull-last" | sed -n 's/^d //p'|sort|uniq > "$TMP_DIR/pull-del"
+    cat "$STATE_DIR/pull-current" "$STATE_DIR/pull-last" | sed -n 's/^d //p'|sort|uniq > "$TMP_DIR/pull-del" || die "unable to create pull-del"
     comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | comm -23 - "$TMP_DIR/pull-del" | find_to_filter '-' > "$TMP_DIR/local-del" || die "unable to create local-del"
   else
     echo "" > "$TMP_DIR/local-del" || die "unable to create local-del"

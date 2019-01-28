@@ -1,4 +1,5 @@
 #!/bin/bash
+# vim: et:sw=2:ts=2
 
 #
 # rsync based sync script - heavily based on bitpocket from
@@ -6,7 +7,7 @@
 # simplified by omiting the approach to preserve directory timestamps
 # and fully relying on rsync - no ssh to remote systems
 #
-#set -x
+# set -x
 
 LANG=$(locale | grep LANG= | sed 's:LANG=::')
 if [[ -z "$LANG" ]]; then
@@ -23,6 +24,7 @@ TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 REMOTE_LOCK_DIR="$DOT_DIR/$REMOTE_LOCK_NAME"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+FILTER_FILES=(include exclude filter)
 
 
 # Default settings
@@ -48,6 +50,9 @@ usage:  bitpocket { init [<REMOTE_HOST>] <REMOTE_PATH>
 Available commands:
    sync    Run the sync process. If no command is specified, sync is run by
            default.
+   resync  merge remote and local
+           will not delete any local files
+           always necessary if includes/excludes changed
    init    Initialize a new bitpocket folder. Requires path and optional
            remote host params. Remote path must already exist.
    pack    Pack any existing (automatic) backups into a git repository.
@@ -96,7 +101,7 @@ function parseargs() {
                                 shift;
                             fi
                             shift;;
-            sync|pack|cron|log|list|help)
+            sync|pack|cron|log|list|help|resync)
                             COMMANDS+=("$1");;
             # Anything else
             *)              echo "!!! Invalid command: $1"
@@ -386,7 +391,7 @@ function create_sync_start {
 #should be run in background to be as atomic as possible...
 function finish_sync {
   trap '' SIGHUP SIGABRT SIGINT SIGQUIT SIGILL SIGTRAP SIGFPE SIGPIPE SIGTERM SIGSTOP 
-  #the following operations should be somehow atomic	
+  #the following operations should be somehow atomic  
   mv -f "$STATE_DIR/new-sync" "$STATE_DIR/last-sync" || die "unable to create sync marker"
   mv -f "$STATE_DIR/tree-current" "$STATE_DIR/tree-last"
   mv -f "$STATE_DIR/pull-current" "$STATE_DIR/pull-last"
@@ -426,10 +431,35 @@ function strip_mode {
       cut -c12-
 }
 
+#check all the filter files
+function check_filter_files {
+  #no need to check if there was no sync before
+  [ ! -e "$STATE_DIR/last-sync" ] && return 0
+  for ff in ${FILTER_FILES[@]} 
+  do
+    [ -f "$DOT_DIR/$ff" -a ! -f "$STATE_DIR/$ff" ] && return 1
+    [ ! -f "$DOT_DIR/$ff" -a  -f "$STATE_DIR/$ff" ] && return 1
+    if [ -f "$DOT_DIR/$ff" -a  -f "$STATE_DIR/$ff" ] ; then
+      cmp "$DOT_DIR/$ff" "$STATE_DIR/$ff" || return 1
+    fi
+  done
+  return 0
+}
+
+function copy_filter_files {
+  for ff in ${FILTER_FILES[@]} 
+  do
+    rm -f "$STATE_DIR/$ff"
+    [ -f "$DOT_DIR/$ff" ] && cp "$DOT_DIR/$ff" "$STATE_DIR/$ff"
+  done
+}
+
 # Do the actual synchronization
 function sync {
   assert_dotdir
   acquire_lock
+  check_filter_files || die "include/exclude filters have changed, need to run resync"
+  [ ! -e "$STATE_DIR/last-sync" ] && copy_filter_files
   acquire_remote_lock_rsync
   create_sync_start
   detect_fatfs
@@ -462,6 +492,12 @@ function sync {
   echo -e "${GREEN}bitpocket finished${CLEAR} at $(date)."
   echo
 
+}
+
+function resync {
+  echo "#re-syncing"
+  rm -f "$STATE_DIR/last-sync"
+  sync
 }
 
 # Pack backups into a git repository
@@ -786,4 +822,5 @@ case ${COMMANDS[0]} in
     list)       list;;
     help)       usage;;
     sync)       sync;;
+    resync)     resync;;
 esac

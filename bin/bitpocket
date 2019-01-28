@@ -317,7 +317,7 @@ function detect_changes() {
     # TODO: we do not need this really....
     # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
     # for logging of deleted files, which need to be sorted
-    exec 3> >(grep -Ff /dev/stdin "$STATE_DIR/tree-current" | sort > "$TMP_DIR/pull-delete")
+    exec 3> "$STATE_DIR/pull-current"
 
     while read -r line
     do
@@ -326,14 +326,10 @@ function detect_changes() {
         filename="${info[*]:2}"
         if [[ "$operation" =~ ^\*deleting ]]
         then
-            echo "/${filename}" >&3
+            echo "d ./${filename}" >&3
         elif [[ "$operation" =~ \+\+\+\+$ ]]
         then
-            # Mark as added locally (with proper mode)
-            mode=${info[1]}
-            filetype="${operation:1:1}"
-            filetype="${filetype/f/-}"
-            echo ":${filetype}${mode}/$filename" >> "$TMP_DIR/tree-after"
+            echo "w ./$filename" >&3
         fi
         echo "$operation $filename"
     done
@@ -387,10 +383,13 @@ function create_sync_start {
   touch "$STATE_DIR/new-sync"
 }
 
+#should be run in background to be as atomic as possible...
 function finish_sync {
-  rm -f "$STATE_DIR/last-sync" "$STATE_DIR/tree-last"
-  mv "$STATE_DIR/new-sync" "$STATE_DIR/last-sync" || die "unable to create sync marker"
-  mv "$STATE_DIR/tree-current" "$STATE_DIR/tree-last"
+  trap '' SIGHUP SIGABRT SIGINT SIGQUIT SIGILL SIGTRAP SIGFPE SIGPIPE SIGTERM SIGSTOP 
+  #the following operations should be somehow atomic	
+  mv -f "$STATE_DIR/new-sync" "$STATE_DIR/last-sync" || die "unable to create sync marker"
+  mv -f "$STATE_DIR/tree-current" "$STATE_DIR/tree-last"
+  mv -f "$STATE_DIR/pull-current" "$STATE_DIR/pull-last"
 }
 
 function analyse {
@@ -398,6 +397,7 @@ function analyse {
   # simpliefied approach:
   # check for local changes after the last sync start (mtime against last-sync) -> local-add-change, preserve them from deletes
   # check for local deletes (compare tree-last with tree-current) -> local-del and omit them completely from the pull
+  # the last deletes from remote (pull-delete) will be substracted from the list 
   # remaining issues:
   # (1) if a remote file gets changed during the sync it will be stored with a mtime > last-sync
   #     this will prevent it from being deleted on the next sync if afterwards it would be deleted remotely (and this way will be transferred back)
@@ -412,7 +412,10 @@ function analyse {
   find . | sort > "$STATE_DIR/tree-current"
   if [ -e "$STATE_DIR/last-sync" -a -s "$STATE_DIR/tree-last" ]; then
     find . -newer "$STATE_DIR/last-sync" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
-    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | find_to_filter '-' > "$TMP_DIR/local-del" || die "unable to create local-del"
+    [ ! -f "$STATE_DIR/pull-current" ] && touch "$STATE_DIR/pull-current"
+    [ ! -f "$STATE_DIR/pull-last" ] && touch "$STATE_DIR/pull-last"
+    cat "$STATE_DIR/pull-current" "$STATE_DIR/pull-last" | sed -n 's/^d //p'|sort|uniq > "$TMP_DIR/pull-del"
+    comm -23 "$STATE_DIR/tree-last" "$STATE_DIR/tree-current" | comm -23 - "$TMP_DIR/pull-del" | find_to_filter '-' > "$TMP_DIR/local-del" || die "unable to create local-del"
   else
     echo "" > "$TMP_DIR/local-del" || die "unable to create local-del"
     cat "$STATE_DIR/tree-current" | find_to_filter P > "$TMP_DIR/local-add-change" || die "unable to create local-add-change"
@@ -448,7 +451,8 @@ function sync {
 
   pull
   push
-  finish_sync
+  finish_sync &
+  wait $!
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop

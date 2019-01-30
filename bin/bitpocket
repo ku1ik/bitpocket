@@ -312,7 +312,7 @@ function scrub_rsync_list {
     # them. Use the ASCII "file separator" (0x1c) to separate the filename from
     # the file mode in the output.
     sed -En '/^[dl-]/ {
-        s:^([^[:space:]]*)[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*(.*$):\:\1/\2:
+        s@^([^[:space:]]*)[[:digit:][:space:],/-]*[[:digit:]:]* (.*$)@:\1/\2@
         /\/\.$/ b
         s:([*?[]):\\\1:g
         p

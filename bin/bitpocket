@@ -414,7 +414,7 @@ function analyse {
 
 function strip_mode {
     if [[ $STATE_VERSION -gt 1 ]]; then
-        cut -c12-
+        cut -b12-
     else
         # State file version might be intermixed. Evaluate each line
         sed -E "s/^:.{10}//"

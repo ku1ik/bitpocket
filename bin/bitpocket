@@ -334,7 +334,7 @@ function analyse {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES "$REMOTE"/ \
-      | tee >(md5sum > "$STATE_DIR/remote-tree-current.md5") \
+      | tee >(grep -Ev "^d" | md5sum > "$STATE_DIR/remote-tree-current.md5") \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/remote-tree-current" &
@@ -343,7 +343,7 @@ function analyse {
 
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
-      | tee >(md5sum > "$STATE_DIR/tree-current.md5") \
+      | tee >(grep -Ev "^d" | md5sum > "$STATE_DIR/tree-current.md5") \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/tree-current" \

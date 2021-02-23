@@ -217,7 +217,7 @@ function pull() {
         --filter="P **" \
         $DO_BACKUP \
         --out-format=%i:%B:%n \
-        $RSYNC_OPTS $USER_RULES $REMOTE/ . \
+        $RSYNC_OPTS $USER_RULES "$REMOTE"/ . \
   | detect_changes \
   | prefix "  | " || die "PULL"
 
@@ -284,7 +284,7 @@ function push() {
         --filter=". -" \
         --filter="P **" \
         $DO_BACKUP \
-        $USER_RULES . $REMOTE/ \
+        $USER_RULES . "$REMOTE"/ \
   | prefix "  | " || die "PUSH"
 
   # Some versions of rsync will create the backup dir, even if it doesn't get
@@ -333,7 +333,7 @@ function analyse {
   # snapshot is available locally
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
-    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES $REMOTE/ \
+    rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES "$REMOTE"/ \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/remote-tree-current" &

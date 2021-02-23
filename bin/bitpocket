@@ -56,6 +56,13 @@ you encounter.
     alias sed="sed -E"
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    alias cp="cp -c"
+    function md5sum() {
+        md5
+    }
+fi
+
 # Decide on runner (ssh / bash -c)
 function setup_remote() {
     if [[ -n "$REMOTE_HOST" ]]; then

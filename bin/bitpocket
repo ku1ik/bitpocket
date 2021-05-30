@@ -129,10 +129,29 @@ function pull() {
   # Determine what will be fetched from server and make backup
   # copies of any local files to be deleted or overwritten.
   # Order of includes/excludes/filters is EXTREMELY important
+
+  #@todo https://github.com/sickill/bitpocket/commit/5f539a0
+  #@todo https://github.com/sickill/bitpocket/commit/a57a4b3
+  # {
+  #   # Use a transactional state, so that activity that happens while the sync
+  #   # is performed is excluded from the sync. This will help prevent files
+  #   # disappearing because they were not excluded
+  #   cat "$STATE_DIR/tree-current"
+  #   if [[ -f "$STATE_DIR/remote-tree-current" ]]; then
+  #     cat "$STATE_DIR/remote-tree-current"
+  #   fi
+  # } \
+  # | rsync --dry-run -auzxi --delete \
+  # --exclude "/$DOT_DIR" --exclude-from="$TMP_DIR/local-add-del" \
+  # --include-from=- \
+
+  
+  # rsync  chooses  between doing a simple string match and wildcard matching by checking if the pattern contains one
+  # of these three wildcard characters: ¡¯*¡¯, ¡¯?¡¯, and ¡¯[¡¯
   cat "$TMP_DIR/local-add-del" | sed -e "s/\[/\\\\[/g" \
   | rsync --dry-run \
         -auzxi --delete --exclude "/$DOT_DIR" --exclude-from=- \
-        $RSYNC_OPTS $USER_RULES $REMOTE/ . \
+  $RSYNC_OPTS $USER_RULES $REMOTE/ . \
   | while read line; do
     if [[ "$line" =~ ^[ch\<\>][fd]|^\*deleting ]]; then
       operation=${line%% *}

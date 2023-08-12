@@ -1,8 +1,5 @@
 # bitpocket
 
-[![Build Status](https://secure.travis-ci.org/sickill/bitpocket.png?branch=master)](http://travis-ci.org/sickill/bitpocket)
-
-
 ## About
 
 **bitpocket** is a small but smart script that does 2-way directory
@@ -19,12 +16,12 @@ can finally make use of it.
 
 Clone repository and symlink `bitpocket` bin to sth in your `$PATH`:
 
-    $ git clone git://github.com/sickill/bitpocket.git
+    $ git clone git://github.com/ku1ik/bitpocket.git
     $ ln -s `pwd`/bitpocket/bin/bitpocket ~/bin/bitpocket
 
 Or download script and place it in a directory in your `$PATH`:
 
-    $ curl -sL https://raw.github.com/sickill/bitpocket/master/bin/bitpocket > ~/bin/bitpocket
+    $ curl -sL https://raw.github.com/ku1ik/bitpocket/master/bin/bitpocket > ~/bin/bitpocket
     $ chmod +x ~/bin/bitpocket
 
 
@@ -109,7 +106,7 @@ allows all the space saving advantages of _git_ when making repeated changes
 to the same files.
 
 There is a discussion about potential directions for versioning direction here:
-[github.com/sickill/bitpocket/issues/15](https://github.com/sickill/bitpocket/issues/15)
+[github.com/ku1ik/bitpocket/issues/15](https://github.com/ku1ik/bitpocket/issues/15)
 
 
 ### Redirecting output to log file (bitpocket cron)
@@ -237,7 +234,7 @@ There are 3 settings that can be enabled in _.bitpocket/config_ file:
 Just uncomment them and change at will.
 
 You can show tray icon during long sync with
-[traytor](https://github.com/sickill/traytor) and following settings:
+[traytor](https://github.com/ku1ik/traytor) and following settings:
 
     SLOW_SYNC_START_CMD='~/bin/traytor -t "BitPocket syncing..." -c "xdg-open ." .bitpocket/icons & echo $! >.bitpocket/traytor.pid'
     SLOW_SYNC_STOP_CMD='kill `cat .bitpocket/traytor.pid`'
@@ -255,5 +252,5 @@ your _.bitpocket/config_ file:
 
 ## Author
 
-* Marcin Kulik | @sickill | https://github.com/sickill | http://ku1ik.com/
+* Marcin Kulik | @ku1ik | https://github.com/ku1ik | http://ku1ik.com/
 * torfason | https://github.com/torfason

@@ -56,6 +56,13 @@ you encounter.
     alias sed="sed -E"
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    alias cp="cp -c"
+    function md5sum() {
+        md5
+    }
+fi
+
 # Decide on runner (ssh / bash -c)
 function setup_remote() {
     if [[ -n "$REMOTE_HOST" ]]; then
@@ -334,6 +341,7 @@ function analyse {
   if [[ -s "$STATE_DIR/tree-prev" ]]; then
     echo "  | Root dir: $REMOTE"
     rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES "$REMOTE"/ \
+      | tee >(grep -Ev "^d" | md5sum > "$STATE_DIR/remote-tree-current.md5") \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/remote-tree-current" &
@@ -342,6 +350,7 @@ function analyse {
 
   # Collect the current snapshot of the local tree
   rsync --list-only --recursive --exclude "/$DOT_DIR" $USER_RULES . \
+      | tee >(grep -Ev "^d" | md5sum > "$STATE_DIR/tree-current.md5") \
       | scrub_rsync_list \
       | sort -k 1.12 \
       > "$STATE_DIR/tree-current" \
@@ -396,10 +405,19 @@ function analyse {
       | sort -u \
       >> "$TMP_DIR/local-add-change"
 
+      # Check if local and remote states are equivalent. If so, then no need to
+      # continue with the sync.
+      wait $remote_tree_pid
+      if cmp -s "$STATE_DIR/tree-current.md5" "$STATE_DIR/remote-tree-current.md5"
+      then
+          cp "$STATE_DIR/tree-current" "$STATE_DIR/tree-prev"
+          echo -e "\n${GREEN}State of local and remote trees is already in sync${CLEAR}"
+          return 1
+      fi
+
       # Prevent deleting local files which were not deleted remotely ie.
       # prevent deleting newly added local files. Compile a list of remotely
       # deleted files which should be protected in the push phase.
-      wait $remote_tree_pid
       strip_mode < "$STATE_DIR/tree-prev" \
       | comm -23 - <(strip_mode < "$STATE_DIR/remote-tree-current") \
       > "$TMP_DIR/remote-del"
@@ -438,29 +456,30 @@ function sync {
   on_slow_sync_start
 
   # Build addtion/deletion lists
-  analyse
+  analyse && {
 
-  if [[ "${OPTIONS[*]}" =~ pretend ]]; then
-      RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
-      echo -e "${YELLOW}Pretending to sync only. No changes will be made${CLEAR}"
-  fi
+      if [[ "${OPTIONS[*]}" =~ pretend ]]; then
+          RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
+          echo -e "${YELLOW}Pretending to sync only. No changes will be made${CLEAR}"
+      fi
 
-  pull
-  push
+      pull
+      push
 
-  if [[ ! "${OPTIONS[*]}" =~ pretend ]]; then
-      # Save after-sync state
+      if [[ ! "${OPTIONS[*]}" =~ pretend ]]; then
+          # Save after-sync state
 
-      # Generate a incremental snapshot of the local tree including files deleted
-      # and added via the pull()
-      #
-      # Remove pull-deleted files from the tree-after snapshot
-      sort -k1.12 "$TMP_DIR/tree-after" \
-      | comm -23 - "$TMP_DIR/pull-delete" 2> /dev/null \
-      | sed -e "s:/\$::" \
-      > "$STATE_DIR/tree-prev"
-  fi
-  rm "$TMP_DIR/tree-after"
+          # Generate a incremental snapshot of the local tree including files deleted
+          # and added via the pull()
+          #
+          # Remove pull-deleted files from the tree-after snapshot
+          sort -k1.12 "$TMP_DIR/tree-after" \
+          | comm -23 - "$TMP_DIR/pull-delete" 2> /dev/null \
+          | sed -e "s:/\$::" \
+          > "$STATE_DIR/tree-prev"
+      fi
+      rm "$TMP_DIR/tree-after"
+  }
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop

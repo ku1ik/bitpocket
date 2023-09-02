@@ -13,6 +13,7 @@ CFG_FILE="$DOT_DIR/config"
 TMP_DIR="$DOT_DIR/tmp"
 STATE_DIR="$DOT_DIR/state"
 LOCK_DIR="$TMP_DIR/lock"  # Use a lock directory for atomic locks. See the Bash FAQ http://mywiki.wooledge.org/BashFAQ/045
+MIN_DISK_FREE_REMOTE=""  # Use minimum free space for online check
 
 # Default settings
 SLOW_SYNC_TIME=10
@@ -133,6 +134,14 @@ function init {
 ## Host and path of central storage
 REMOTE_HOST=$REMOTE_HOST
 REMOTE_PATH="$REMOTE_PATH"
+
+## if REMOTE_FREE_SPACE is set bitpocket will make sure there is more 
+## than this amount of space available at destination before starting to 
+## sync. Setting this to something larger than the root filesystem
+## is a convenient way to make sure a large mount has not failed
+## or unmounted
+## REMOTE_FREE_SPACE=10000000000 ## 10T
+## REMOTE_FREE_SPACE=100000000 ## 100G
 
 ## Backups -----------------------------------
 ## Enable file revisioning locally in the pull phase (>false< to disable)
@@ -433,6 +442,8 @@ function sync {
   echo
   echo -e "${GREEN}bitpocket started${CLEAR} at $(date)."
   echo
+  # if $REMOTE_FREE_SPACE is set make sure there is more space than that at destination  
+  check_free_space
 
   # Fire off slow sync start notifier in background
   on_slow_sync_start
@@ -585,6 +596,22 @@ function acquire_lock {
 
 function release_lock {
   rm "$LOCK_DIR/pid" &>/dev/null && rmdir "$LOCK_DIR" &>/dev/null
+}
+
+function check_free_space {
+  if ! [[ -z "$REMOTE_FREE_SPACE" ]]; then
+    dest_free_space=$($REMOTE_RUNNER "df --output=avail \"$REMOTE_PATH\"   | awk 'NR==2 {print $1}'")
+    echo "Found $dest_free_space bytes of free space, requiring $REMOTE_FREE_SPACE"
+    if [ "$dest_free_space" -gt "$REMOTE_FREE_SPACE" ]; then
+      echo -e "${GREEN}Free space checked and it is ok ${CLEAR}."
+      echo
+    else
+      echo -e "${RED}Free space checked and it is not ok. Couldn't acquire enough space Exiting.${CLEAR}"
+      echo
+      release_lock
+      exit 3 
+    fi
+  fi
 }
 
 function acquire_remote_lock {

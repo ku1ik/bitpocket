@@ -196,8 +196,6 @@ function pull() {
       local DO_BACKUP="--backup --backup-dir=$BACKUP_TARGET"
   fi
 
-  cp "$STATE_DIR/tree-current" "$TMP_DIR/tree-after"
-
   # Determine what will be fetched from server and make backup copies of any
   # local files to be deleted or overwritten.
   #
@@ -238,6 +236,7 @@ function detect_changes() {
     # Create a duplicate of STDOUT for logging of backed-up files, and use fd#4
     # for logging of deleted files, which need to be sorted
     exec 3> >(grep -Ff /dev/stdin "$STATE_DIR/tree-current" | sort > "$TMP_DIR/pull-delete")
+    exec 4> >(sort -k1.12 > "$TMP_DIR/pull-add")
 
     while read -r line
     do
@@ -253,12 +252,13 @@ function detect_changes() {
             mode=${info[1]}
             filetype="${operation:1:1}"
             filetype="${filetype/f/-}"
-            echo ":${filetype}${mode}/$filename" >> "$TMP_DIR/tree-after"
+            echo ":${filetype}${mode}/$filename" >&4
         fi
         echo "$operation $filename"
     done
 
     exec 3>&-
+    exec 4>&-
 }
 
 function push() {
@@ -312,7 +312,7 @@ function scrub_rsync_list {
     # them. Use the ASCII "file separator" (0x1c) to separate the filename from
     # the file mode in the output.
     sed -En '/^[dl-]/ {
-        s:^([^[:space:]]*)[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*(.*$):\:\1/\2:
+        s@^([^[:space:]]*)[[:digit:][:space:],/-]*[[:digit:]:]* (.*$)@:\1/\2@
         /\/\.$/ b
         s:([*?[]):\\\1:g
         p
@@ -414,7 +414,7 @@ function analyse {
 
 function strip_mode {
     if [[ $STATE_VERSION -gt 1 ]]; then
-        cut -c12-
+        cut -b12-
     else
         # State file version might be intermixed. Evaluate each line
         sed -E "s/^:.{10}//"
@@ -454,13 +454,12 @@ function sync {
       # Generate a incremental snapshot of the local tree including files deleted
       # and added via the pull()
       #
-      # Remove pull-deleted files from the tree-after snapshot
-      sort -k1.12 "$TMP_DIR/tree-after" \
+      # Remove pull-deleted files from the tree-current snapshot
+      sort -m -k1.12 "$STATE_DIR/tree-current" "$TMP_DIR/pull-add" \
       | comm -23 - "$TMP_DIR/pull-delete" 2> /dev/null \
       | sed -e "s:/\$::" \
       > "$STATE_DIR/tree-prev"
   fi
-  rm "$TMP_DIR/tree-after"
 
   # Fire off slow sync stop notifier in background
   on_slow_sync_stop
